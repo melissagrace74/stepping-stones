@@ -13,6 +13,8 @@ from models import (
     FamilyInvitation,
 )
 from auth_routes import auth_bp
+from responsibility_routes import responsibility_bp
+from step_routes import step_bp
 
 
 load_dotenv()
@@ -47,6 +49,8 @@ def create_app():
         }), 401
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(responsibility_bp)
+    app.register_blueprint(step_bp)
 
     @app.get("/api/health")
     def health_check():

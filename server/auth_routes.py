@@ -259,3 +259,25 @@ def me():
         "user": current_user.to_dict(),
         "family": current_user.family.to_dict(),
     }), 200
+
+
+@auth_bp.get("/family-members")
+@login_required
+def family_members():
+    members = (
+        User.query
+        .filter_by(family_id=current_user.family_id)
+        .order_by(User.name.asc(), User.id.asc())
+        .all()
+    )
+
+    return jsonify({
+        "members": [
+            {
+                "id": member.id,
+                "name": member.name,
+                "role": member.role,
+            }
+            for member in members
+        ]
+    }), 200

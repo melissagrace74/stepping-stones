@@ -14,6 +14,7 @@ import {
   LogOut,
   Mail,
   Plus,
+  Repeat2,
   UserRound,
 } from 'lucide-react'
 import './App.css'
@@ -24,12 +25,26 @@ const planningLabels = {
   own_it: 'Own It',
 }
 
+const weekdayLabels = [
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+  'Sun',
+]
+
 const emptyForm = {
   title: '',
   description: '',
   assigned_to_id: '',
   due_date: '',
   planning_level: 'plan_together',
+  frequency: 'none',
+  interval: 1,
+  weekdays: [],
+  end_date: '',
 }
 
 function planningClass(level) {
@@ -53,20 +68,20 @@ function formatDate(value) {
 function formatCreatedDate(value) {
   if (!value) return 'Unknown'
 
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Unknown'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return 'Unknown'
 
-  return date.toLocaleDateString('en-US', {
+  return parsed.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   })
 }
 
-function localDateKey(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+function localDateKey(value) {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
 
   return `${year}-${month}-${day}`
 }
@@ -107,12 +122,34 @@ function groupResponsibilities(responsibilities) {
     return firstDate.localeCompare(secondDate) || a.id - b.id
   })
 
+  // Track which recurring schedules already have an Upcoming card.
+  // This does not change or delete any responsibility in the database.
+  const upcomingRecurringSchedules = new Set()
+
   sorted.forEach((item) => {
     if (item.is_complete) {
       groups.completed.push(item)
-    } else if (!item.due_date || item.due_date <= week.end) {
+      return
+    }
+
+    // Show every incomplete occurrence due this week or overdue.
+    if (!item.due_date || item.due_date <= week.end) {
       groups.thisWeek.push(item)
-    } else {
+      return
+    }
+
+    // One-time responsibilities always appear individually.
+    if (!item.recurrence_schedule_id) {
+      groups.upcoming.push(item)
+      return
+    }
+
+    // The list is sorted by date, so the first future occurrence
+    // encountered is the next upcoming one for this schedule.
+    if (
+      !upcomingRecurringSchedules.has(item.recurrence_schedule_id)
+    ) {
+      upcomingRecurringSchedules.add(item.recurrence_schedule_id)
       groups.upcoming.push(item)
     }
   })
@@ -152,8 +189,7 @@ function ResponsibilityCard({ item, onOpen, disabled }) {
             item.planning_level
           )}`}
         >
-          {planningLabels[item.planning_level] ||
-            item.planning_level}
+          {planningLabels[item.planning_level] || item.planning_level}
         </span>
 
         {item.is_complete ? (
@@ -165,6 +201,23 @@ function ResponsibilityCard({ item, onOpen, disabled }) {
 
       <h3>{item.title}</h3>
       <p>{item.description}</p>
+
+      {item.recurrence_schedule_id && (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '13px',
+            fontWeight: 600,
+            color: '#537b61',
+            marginBottom: '12px',
+          }}
+        >
+          <Repeat2 size={15} />
+          Recurring responsibility
+        </span>
+      )}
 
       <div className="card-meta">
         <span>
@@ -331,6 +384,15 @@ function App() {
       active = false
     }
   }, [user])
+
+  async function reloadResponsibilities() {
+    const response = await fetch('/api/responsibilities', {
+      credentials: 'include',
+    })
+
+    const data = await readApi(response)
+    setResponsibilities(data.responsibilities || [])
+  }
 
   async function handleLogin(event) {
     event.preventDefault()
@@ -503,7 +565,7 @@ function App() {
   async function openNewForm() {
     setError('')
     setFormError('')
-    setForm(emptyForm)
+    setForm({ ...emptyForm })
     setFormLoading(true)
     setShowNewForm(true)
 
@@ -528,10 +590,29 @@ function App() {
     }))
   }
 
+  function updateFrequency(value) {
+    setForm((current) => ({
+      ...current,
+      frequency: value,
+      interval: 1,
+      weekdays: [],
+      end_date: '',
+    }))
+  }
+
+  function toggleWeekday(day) {
+    setForm((current) => ({
+      ...current,
+      weekdays: current.weekdays.includes(day)
+        ? current.weekdays.filter((value) => value !== day)
+        : [...current.weekdays, day].sort((a, b) => a - b),
+    }))
+  }
+
   function closeNewForm() {
     setShowNewForm(false)
     setFormError('')
-    setForm(emptyForm)
+    setForm({ ...emptyForm })
   }
 
   async function handleCreateResponsibility(event) {
@@ -539,32 +620,70 @@ function App() {
     if (formSaving) return
 
     setFormError('')
+
+    if (form.frequency !== 'none' && !form.due_date) {
+      setFormError('Choose a start date for the recurring responsibility.')
+      return
+    }
+
+    if (
+      form.frequency === 'weekly' &&
+      form.weekdays.length === 0
+    ) {
+      setFormError('Select at least one day for weekly recurrence.')
+      return
+    }
+
+    if (
+      form.frequency !== 'none' &&
+      form.end_date &&
+      form.end_date < form.due_date
+    ) {
+      setFormError('The end date cannot be before the start date.')
+      return
+    }
+
     setFormSaving(true)
+
+    const payload = {
+      title: form.title.trim(),
+      description: form.description.trim(),
+      assigned_to_id: Number(form.assigned_to_id),
+      due_date: form.due_date,
+      planning_level: form.planning_level,
+    }
+
+    if (form.frequency !== 'none') {
+      payload.recurrence = {
+        frequency: form.frequency,
+        interval: Number(form.interval),
+        end_date: form.end_date || null,
+      }
+
+      if (form.frequency === 'weekly') {
+        payload.recurrence.weekdays = form.weekdays
+      }
+    }
 
     try {
       const response = await fetch('/api/responsibilities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          title: form.title.trim(),
-          description: form.description.trim(),
-          assigned_to_id: Number(form.assigned_to_id),
-          due_date: form.due_date,
-          planning_level: form.planning_level,
-        }),
+        body: JSON.stringify(payload),
       })
 
-      const data = await readApi(response)
-
-      setResponsibilities((current) =>
-        [...current, data.responsibility].sort((a, b) => {
-          const dateComparison = a.due_date.localeCompare(b.due_date)
-          return dateComparison || a.id - b.id
-        })
-      )
+      await readApi(response)
 
       closeNewForm()
+
+      try {
+        await reloadResponsibilities()
+      } catch (refreshError) {
+        setError(
+          `Responsibility created, but the dashboard could not refresh: ${refreshError.message}`
+        )
+      }
     } catch (err) {
       setFormError(err.message)
     } finally {
@@ -691,7 +810,9 @@ function App() {
                     </select>
 
                     <label htmlFor="responsibility-date">
-                      Due date
+                      {form.frequency === 'none'
+                        ? 'Due date'
+                        : 'First due date'}
                     </label>
                     <input
                       id="responsibility-date"
@@ -725,6 +846,188 @@ function App() {
                       </option>
                     </select>
 
+                    <div
+                      style={{
+                        marginTop: '12px',
+                        paddingTop: '24px',
+                        borderTop: '1px solid #e3e9e1',
+                      }}
+                    >
+                      <span
+                        className="eyebrow"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginBottom: '16px',
+                        }}
+                      >
+                        <Repeat2 size={17} />
+                        MAKE IT A ROUTINE
+                      </span>
+
+                      <label htmlFor="responsibility-frequency">
+                        Repeat
+                      </label>
+                      <select
+                        id="responsibility-frequency"
+                        value={form.frequency}
+                        onChange={(event) =>
+                          updateFrequency(event.target.value)
+                        }
+                      >
+                        <option value="none">
+                          Does not repeat
+                        </option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+
+                      {form.frequency !== 'none' && (
+                        <>
+                          <label htmlFor="responsibility-interval">
+                            Repeat every
+                          </label>
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                            }}
+                          >
+                            <input
+                              id="responsibility-interval"
+                              type="number"
+                              min="1"
+                              max="365"
+                              step="1"
+                              value={form.interval}
+                              onChange={(event) =>
+                                updateForm(
+                                  'interval',
+                                  event.target.value
+                                )
+                              }
+                              required
+                              style={{
+                                width: '110px',
+                                flex: '0 0 110px',
+                              }}
+                            />
+                            <span>
+                              {form.frequency === 'daily'
+                                ? 'day(s)'
+                                : form.frequency === 'weekly'
+                                  ? 'week(s)'
+                                  : 'month(s)'}
+                            </span>
+                          </div>
+
+                          {form.frequency === 'weekly' && (
+                            <fieldset
+                              style={{
+                                border: 0,
+                                padding: 0,
+                                margin: '20px 0',
+                                minWidth: 0,
+                              }}
+                            >
+                              <legend
+                                style={{
+                                  fontWeight: 600,
+                                  marginBottom: '12px',
+                                }}
+                              >
+                                Repeat on
+                              </legend>
+
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  flexWrap: 'wrap',
+                                  gap: '8px',
+                                }}
+                              >
+                                {weekdayLabels.map((label, day) => {
+                                  const selected =
+                                    form.weekdays.includes(day)
+
+                                  return (
+                                    <button
+                                      key={label}
+                                      type="button"
+                                      aria-pressed={selected}
+                                      onClick={() => toggleWeekday(day)}
+                                      style={{
+                                        minWidth: '48px',
+                                        padding: '10px 12px',
+                                        borderRadius: '12px',
+                                        border: selected
+                                          ? '2px solid #426f51'
+                                          : '1px solid #cddbd0',
+                                        background: selected
+                                          ? '#e2eee4'
+                                          : '#ffffff',
+                                        color: '#254a32',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      {label}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+
+                              <p
+                                style={{
+                                  fontSize: '13px',
+                                  marginTop: '10px',
+                                  color: '#62746a',
+                                }}
+                              >
+                                Select one or more days of the week.
+                              </p>
+                            </fieldset>
+                          )}
+
+                          <label htmlFor="responsibility-end-date">
+                            Repeat until
+                            <span className="optional-label">
+                              {' '}(optional)
+                            </span>
+                          </label>
+                          <input
+                            id="responsibility-end-date"
+                            type="date"
+                            min={form.due_date || undefined}
+                            value={form.end_date}
+                            onChange={(event) =>
+                              updateForm(
+                                'end_date',
+                                event.target.value
+                              )
+                            }
+                          />
+
+                          <p
+                            style={{
+                              fontSize: '13px',
+                              color: '#62746a',
+                              lineHeight: 1.6,
+                              marginTop: '10px',
+                            }}
+                          >
+                            Leave this blank to keep repeating.
+                            Stepping Stones creates upcoming
+                            responsibilities as time moves forward.
+                          </p>
+                        </>
+                      )}
+                    </div>
+
                     {formError && (
                       <p className="form-error" role="alert">
                         {formError}
@@ -736,6 +1039,7 @@ function App() {
                         type="button"
                         className="secondary-button"
                         onClick={closeNewForm}
+                        disabled={formSaving}
                       >
                         Cancel
                       </button>
@@ -749,7 +1053,9 @@ function App() {
                       >
                         {formSaving
                           ? 'Creating...'
-                          : 'Create responsibility'}
+                          : form.frequency === 'none'
+                            ? 'Create responsibility'
+                            : 'Create recurring responsibility'}
                         <ArrowRight size={18} />
                       </button>
                     </div>
@@ -784,6 +1090,22 @@ function App() {
                 </span>
 
                 <h1>{selectedResponsibility.title}</h1>
+
+                {selectedResponsibility.recurrence_schedule_id && (
+                  <p
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      color: '#537b61',
+                      fontWeight: 600,
+                      marginBottom: '12px',
+                    }}
+                  >
+                    <Repeat2 size={17} />
+                    Part of a recurring schedule
+                  </p>
+                )}
 
                 <p className="detail-description">
                   {selectedResponsibility.description ||
@@ -1168,9 +1490,7 @@ function App() {
 
               <input
                 id="password"
-                type={
-                  showPassword ? 'text' : 'password'
-                }
+                type={showPassword ? 'text' : 'password'}
                 placeholder="Enter your password"
                 value={password}
                 onChange={(event) =>

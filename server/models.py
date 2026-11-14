@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 
 from flask_login import UserMixin
-from sqlalchemy import CheckConstraint, UniqueConstraint
+from sqlalchemy import CheckConstraint
 
 from extensions import db
 
@@ -16,7 +16,11 @@ class Family(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False
+    )
 
     users = db.relationship(
         "User",
@@ -26,6 +30,12 @@ class Family(db.Model):
 
     responsibilities = db.relationship(
         "Responsibility",
+        back_populates="family",
+        cascade="all, delete-orphan"
+    )
+
+    invitations = db.relationship(
+        "FamilyInvitation",
         back_populates="family",
         cascade="all, delete-orphan"
     )
@@ -41,23 +51,43 @@ class User(UserMixin, db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
+
     family_id = db.Column(
         db.Integer,
         db.ForeignKey("families.id"),
         nullable=False,
         index=True
     )
-    name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
 
-    __table_args__ = (
-        CheckConstraint("role IN ('parent', 'child')", name="valid_user_role"),
+    name = db.Column(db.String(100), nullable=False)
+
+    email = db.Column(
+        db.String(255),
+        unique=True,
+        nullable=False,
+        index=True
     )
 
-    family = db.relationship("Family", back_populates="users")
+    password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), nullable=False)
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('parent', 'child')",
+            name="valid_user_role"
+        ),
+    )
+
+    family = db.relationship(
+        "Family",
+        back_populates="users"
+    )
 
     created_responsibilities = db.relationship(
         "Responsibility",
@@ -69,6 +99,11 @@ class User(UserMixin, db.Model):
         "Responsibility",
         foreign_keys="Responsibility.assigned_to_id",
         back_populates="assignee"
+    )
+
+    created_invitations = db.relationship(
+        "FamilyInvitation",
+        back_populates="creator"
     )
 
     def to_dict(self):
@@ -85,17 +120,20 @@ class Responsibility(db.Model):
     __tablename__ = "responsibilities"
 
     id = db.Column(db.Integer, primary_key=True)
+
     family_id = db.Column(
         db.Integer,
         db.ForeignKey("families.id"),
         nullable=False,
         index=True
     )
+
     created_by_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
         nullable=False
     )
+
     assigned_to_id = db.Column(
         db.Integer,
         db.ForeignKey("users.id"),
@@ -106,17 +144,31 @@ class Responsibility(db.Model):
     description = db.Column(db.Text)
     due_date = db.Column(db.Date, nullable=False)
     planning_level = db.Column(db.String(30), nullable=False)
-    is_complete = db.Column(db.Boolean, default=False, nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+
+    is_complete = db.Column(
+        db.Boolean,
+        default=False,
+        nullable=False
+    )
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "planning_level IN ('plan_together', 'share_responsibility', 'own_it')",
+            "planning_level IN "
+            "('plan_together', 'share_responsibility', 'own_it')",
             name="valid_planning_level"
         ),
     )
 
-    family = db.relationship("Family", back_populates="responsibilities")
+    family = db.relationship(
+        "Family",
+        back_populates="responsibilities"
+    )
 
     creator = db.relationship(
         "User",
@@ -154,8 +206,12 @@ class Responsibility(db.Model):
         }
 
         if include_steps:
-            data["steps"] = [step.to_dict() for step in self.steps]
+            data["steps"] = [
+                step.to_dict() for step in self.steps
+            ]
+
             data["total_steps"] = len(self.steps)
+
             data["completed_steps"] = sum(
                 step.is_complete for step in self.steps
             )
@@ -167,6 +223,7 @@ class Step(db.Model):
     __tablename__ = "steps"
 
     id = db.Column(db.Integer, primary_key=True)
+
     responsibility_id = db.Column(
         db.Integer,
         db.ForeignKey("responsibilities.id"),
@@ -176,9 +233,24 @@ class Step(db.Model):
 
     title = db.Column(db.String(160), nullable=False)
     due_date = db.Column(db.Date)
-    position = db.Column(db.Integer, default=0, nullable=False)
-    is_complete = db.Column(db.Boolean, default=False, nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+
+    position = db.Column(
+        db.Integer,
+        default=0,
+        nullable=False
+    )
+
+    is_complete = db.Column(
+        db.Boolean,
+        default=False,
+        nullable=False
+    )
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False
+    )
 
     responsibility = db.relationship(
         "Responsibility",
@@ -190,7 +262,64 @@ class Step(db.Model):
             "id": self.id,
             "responsibility_id": self.responsibility_id,
             "title": self.title,
-            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "due_date": (
+                self.due_date.isoformat()
+                if self.due_date
+                else None
+            ),
             "position": self.position,
             "is_complete": self.is_complete
         }
+
+
+class FamilyInvitation(db.Model):
+    __tablename__ = "family_invitations"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    family_id = db.Column(
+        db.Integer,
+        db.ForeignKey("families.id"),
+        nullable=False,
+        index=True
+    )
+
+    created_by_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False
+    )
+
+    code_hash = db.Column(
+        db.String(64),
+        unique=True,
+        nullable=False
+    )
+
+    role = db.Column(db.String(20), nullable=False)
+
+    expires_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False
+    )
+
+    used_at = db.Column(
+        db.DateTime(timezone=True)
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('parent', 'child')",
+            name="valid_invitation_role"
+        ),
+    )
+
+    family = db.relationship(
+        "Family",
+        back_populates="invitations"
+    )
+
+    creator = db.relationship(
+        "User",
+        back_populates="created_invitations"
+    )

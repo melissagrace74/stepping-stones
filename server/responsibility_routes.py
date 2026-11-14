@@ -1,11 +1,12 @@
 
-from datetime import date
+import calendar
+from datetime import date, timedelta
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
 from extensions import db
-from models import Responsibility, User
+from models import RecurrenceSchedule, Responsibility, User
 
 
 responsibility_bp = Blueprint(
@@ -19,6 +20,14 @@ PLANNING_LEVELS = {
     "share_responsibility",
     "own_it",
 }
+
+RECURRENCE_FREQUENCIES = {
+    "daily",
+    "weekly",
+    "monthly",
+}
+
+RECURRENCE_LOOKAHEAD_DAYS = 60
 
 
 def error_response(message, status=400):
@@ -118,9 +127,237 @@ def validate_fields(data, existing=None):
     }, None
 
 
+def validate_recurrence(data, start_date):
+    errors = {}
+
+    if not isinstance(data, dict):
+        return None, {
+            "recurrence": "Recurrence settings must be an object."
+        }
+
+    frequency = data.get("frequency")
+    interval = data.get("interval", 1)
+    end_date_value = data.get("end_date")
+    weekdays_value = data.get("weekdays")
+
+    if frequency not in RECURRENCE_FREQUENCIES:
+        errors["frequency"] = (
+            "Choose daily, weekly, or monthly recurrence."
+        )
+
+    if type(interval) is not int or interval < 1 or interval > 365:
+        errors["interval"] = (
+            "Repeat interval must be between 1 and 365."
+        )
+
+    end_date = None
+
+    if end_date_value not in (None, ""):
+        end_date = parse_due_date(end_date_value)
+
+        if end_date is None:
+            errors["end_date"] = (
+                "Enter a valid recurrence end date."
+            )
+        elif end_date < start_date:
+            errors["end_date"] = (
+                "End date cannot be before the start date."
+            )
+
+    weekdays = None
+
+    if frequency == "weekly":
+        if weekdays_value is None:
+            weekdays_value = [start_date.weekday()]
+
+        if (
+            not isinstance(weekdays_value, list)
+            or not weekdays_value
+            or any(
+                type(day) is not int or day < 0 or day > 6
+                for day in weekdays_value
+            )
+        ):
+            errors["weekdays"] = (
+                "Choose at least one weekday from 0 to 6."
+            )
+        else:
+            weekdays = ",".join(
+                str(day) for day in sorted(set(weekdays_value))
+            )
+    elif weekdays_value not in (None, []):
+        errors["weekdays"] = (
+            "Weekdays are only used for weekly recurrence."
+        )
+
+    if errors:
+        return None, errors
+
+    return {
+        "frequency": frequency,
+        "interval": interval,
+        "weekdays": weekdays,
+        "end_date": end_date,
+    }, None
+
+
+def recurrence_dates(schedule, window_start, window_end):
+    """
+    Return occurrence dates within the requested window.
+
+    Daily schedules repeat every N days.
+    Weekly schedules repeat every N weeks on selected weekdays.
+    Monthly schedules repeat every N months on the start day,
+    using the last day for shorter months.
+    """
+    start = schedule.start_date
+
+    if schedule.end_date is not None:
+        window_end = min(window_end, schedule.end_date)
+
+    window_start = max(window_start, start)
+
+    if window_start > window_end:
+        return []
+
+    dates = []
+
+    if schedule.frequency == "daily":
+        elapsed_days = (window_start - start).days
+        remainder = elapsed_days % schedule.interval
+
+        if remainder:
+            elapsed_days += schedule.interval - remainder
+
+        occurrence = start + timedelta(days=elapsed_days)
+
+        while occurrence <= window_end:
+            dates.append(occurrence)
+            occurrence += timedelta(days=schedule.interval)
+
+    elif schedule.frequency == "weekly":
+        selected_days = {
+            int(value)
+            for value in (schedule.weekdays or "").split(",")
+            if value.strip().isdigit()
+        }
+
+        if not selected_days:
+            selected_days = {start.weekday()}
+
+        start_monday = start - timedelta(days=start.weekday())
+        occurrence = window_start
+
+        while occurrence <= window_end:
+            occurrence_monday = occurrence - timedelta(
+                days=occurrence.weekday()
+            )
+
+            weeks_elapsed = (
+                occurrence_monday - start_monday
+            ).days // 7
+
+            if (
+                weeks_elapsed % schedule.interval == 0
+                and occurrence.weekday() in selected_days
+            ):
+                dates.append(occurrence)
+
+            occurrence += timedelta(days=1)
+
+    elif schedule.frequency == "monthly":
+        month_index = start.year * 12 + start.month - 1
+
+        while True:
+            year = month_index // 12
+            month = month_index % 12 + 1
+
+            if year > 9999:
+                break
+
+            last_day = calendar.monthrange(year, month)[1]
+            day = min(start.day, last_day)
+            occurrence = date(year, month, day)
+
+            if occurrence > window_end:
+                break
+
+            if occurrence >= window_start:
+                dates.append(occurrence)
+
+            month_index += schedule.interval
+
+    return dates
+
+
+def generate_occurrences(schedule, window_start, window_end):
+    """
+    Create missing occurrences without resetting existing ones.
+
+    Existing completion states and preparation steps are preserved.
+    """
+    dates = recurrence_dates(
+        schedule,
+        window_start,
+        window_end,
+    )
+
+    if not dates:
+        return []
+
+    existing_dates = {
+        responsibility.due_date
+        for responsibility in Responsibility.query.filter(
+            Responsibility.recurrence_schedule_id == schedule.id,
+            Responsibility.due_date.in_(dates),
+        ).all()
+    }
+
+    created = []
+
+    for occurrence_date in dates:
+        if occurrence_date in existing_dates:
+            continue
+
+        responsibility = Responsibility(
+            family_id=schedule.family_id,
+            created_by_id=schedule.created_by_id,
+            assigned_to_id=schedule.assigned_to_id,
+            recurrence_schedule_id=schedule.id,
+            title=schedule.title,
+            description=schedule.description,
+            due_date=occurrence_date,
+            planning_level=schedule.planning_level,
+        )
+
+        db.session.add(responsibility)
+        created.append(responsibility)
+
+    return created
+
+
+def refresh_recurring_occurrences():
+    today = date.today()
+    horizon = today + timedelta(
+        days=RECURRENCE_LOOKAHEAD_DAYS
+    )
+
+    schedules = RecurrenceSchedule.query.filter_by(
+        family_id=current_user.family_id,
+        is_active=True,
+    ).all()
+
+    for schedule in schedules:
+        generate_occurrences(schedule, today, horizon)
+
+    db.session.commit()
+
+
 @responsibility_bp.get("")
 @login_required
 def list_responsibilities():
+    refresh_recurring_occurrences()
+
     responsibilities = Responsibility.query.filter_by(
         family_id=current_user.family_id,
     ).order_by(
@@ -139,34 +376,110 @@ def list_responsibilities():
 @responsibility_bp.post("")
 @login_required
 def create_responsibility():
+    if current_user.role != "parent":
+        return error_response(
+            "Only parents can create responsibilities.",
+            403,
+        )
+
     data = request_data()
     fields, errors = validate_fields(data)
 
     if errors:
         return jsonify({"errors": errors}), 400
 
-    responsibility = Responsibility(
-        family_id=current_user.family_id,
-        created_by_id=current_user.id,
-        **fields,
+    recurrence_data = data.get("recurrence")
+
+    if recurrence_data is None:
+        responsibility = Responsibility(
+            family_id=current_user.family_id,
+            created_by_id=current_user.id,
+            **fields,
+        )
+
+        db.session.add(responsibility)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Responsibility created.",
+            "responsibility": responsibility.to_dict(),
+        }), 201
+
+    recurrence_fields, recurrence_errors = validate_recurrence(
+        recurrence_data,
+        fields["due_date"],
     )
 
-    db.session.add(responsibility)
+    if recurrence_errors:
+        return jsonify({
+            "errors": recurrence_errors
+        }), 400
+
+    schedule = RecurrenceSchedule(
+        family_id=current_user.family_id,
+        created_by_id=current_user.id,
+        assigned_to_id=fields["assigned_to_id"],
+        title=fields["title"],
+        description=fields["description"],
+        planning_level=fields["planning_level"],
+        frequency=recurrence_fields["frequency"],
+        interval=recurrence_fields["interval"],
+        weekdays=recurrence_fields["weekdays"],
+        start_date=fields["due_date"],
+        end_date=recurrence_fields["end_date"],
+        is_active=True,
+    )
+
+    db.session.add(schedule)
+    db.session.flush()
+
+    today = date.today()
+    horizon = today + timedelta(
+        days=RECURRENCE_LOOKAHEAD_DAYS
+    )
+
+    # Include the schedule's starting occurrence, even when
+    # its start date is outside the 60-day lookahead window.
+    generate_occurrences(
+        schedule,
+        schedule.start_date,
+        schedule.start_date,
+    )
+
+    # Fill the upcoming window without duplicating the start.
+    generate_occurrences(
+        schedule,
+        today,
+        horizon,
+    )
+
     db.session.commit()
 
+    first_responsibility = Responsibility.query.filter_by(
+        recurrence_schedule_id=schedule.id,
+    ).order_by(
+        Responsibility.due_date.asc(),
+    ).first()
+
     return jsonify({
-        "message": "Responsibility created.",
-        "responsibility": responsibility.to_dict(),
+        "message": "Recurring responsibility created.",
+        "responsibility": first_responsibility.to_dict(),
+        "recurrence_schedule": schedule.to_dict(),
     }), 201
 
 
 @responsibility_bp.get("/<int:responsibility_id>")
 @login_required
 def get_responsibility(responsibility_id):
-    responsibility = get_family_responsibility(responsibility_id)
+    responsibility = get_family_responsibility(
+        responsibility_id
+    )
 
     if responsibility is None:
-        return error_response("Responsibility not found.", 404)
+        return error_response(
+            "Responsibility not found.",
+            404,
+        )
 
     return jsonify({
         "responsibility": responsibility.to_dict(),
@@ -176,10 +489,15 @@ def get_responsibility(responsibility_id):
 @responsibility_bp.patch("/<int:responsibility_id>")
 @login_required
 def update_responsibility(responsibility_id):
-    responsibility = get_family_responsibility(responsibility_id)
+    responsibility = get_family_responsibility(
+        responsibility_id
+    )
 
     if responsibility is None:
-        return error_response("Responsibility not found.", 404)
+        return error_response(
+            "Responsibility not found.",
+            404,
+        )
 
     if responsibility.created_by_id != current_user.id:
         return error_response(
@@ -188,11 +506,16 @@ def update_responsibility(responsibility_id):
         )
 
     data = request_data()
-    fields, errors = validate_fields(data, existing=responsibility)
+    fields, errors = validate_fields(
+        data,
+        existing=responsibility,
+    )
 
     if errors:
         return jsonify({"errors": errors}), 400
 
+    # Edits to a recurring occurrence affect only that
+    # occurrence, not the underlying recurrence schedule.
     for field, value in fields.items():
         setattr(responsibility, field, value)
 
@@ -207,15 +530,27 @@ def update_responsibility(responsibility_id):
 @responsibility_bp.delete("/<int:responsibility_id>")
 @login_required
 def delete_responsibility(responsibility_id):
-    responsibility = get_family_responsibility(responsibility_id)
+    responsibility = get_family_responsibility(
+        responsibility_id
+    )
 
     if responsibility is None:
-        return error_response("Responsibility not found.", 404)
+        return error_response(
+            "Responsibility not found.",
+            404,
+        )
 
     if responsibility.created_by_id != current_user.id:
         return error_response(
             "Only the creator can delete this responsibility.",
             403,
+        )
+
+    if responsibility.recurrence_schedule_id is not None:
+        return error_response(
+            "Individual recurring occurrences cannot be deleted "
+            "yet. The recurrence schedule must be managed first.",
+            409,
         )
 
     db.session.delete(responsibility)
@@ -226,13 +561,20 @@ def delete_responsibility(responsibility_id):
     }), 200
 
 
-@responsibility_bp.patch("/<int:responsibility_id>/completion")
+@responsibility_bp.patch(
+    "/<int:responsibility_id>/completion"
+)
 @login_required
 def update_completion(responsibility_id):
-    responsibility = get_family_responsibility(responsibility_id)
+    responsibility = get_family_responsibility(
+        responsibility_id
+    )
 
     if responsibility is None:
-        return error_response("Responsibility not found.", 404)
+        return error_response(
+            "Responsibility not found.",
+            404,
+        )
 
     if current_user.id not in (
         responsibility.created_by_id,
@@ -247,7 +589,9 @@ def update_completion(responsibility_id):
     is_complete = data.get("is_complete")
 
     if type(is_complete) is not bool:
-        return error_response("is_complete must be true or false.")
+        return error_response(
+            "is_complete must be true or false."
+        )
 
     responsibility.is_complete = is_complete
     db.session.commit()

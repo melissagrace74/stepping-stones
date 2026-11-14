@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 
 from flask_login import UserMixin
-from sqlalchemy import CheckConstraint
+from sqlalchemy import CheckConstraint, UniqueConstraint
 
 from extensions import db
 
@@ -30,6 +30,12 @@ class Family(db.Model):
 
     responsibilities = db.relationship(
         "Responsibility",
+        back_populates="family",
+        cascade="all, delete-orphan"
+    )
+
+    recurrence_schedules = db.relationship(
+        "RecurrenceSchedule",
         back_populates="family",
         cascade="all, delete-orphan"
     )
@@ -101,6 +107,18 @@ class User(UserMixin, db.Model):
         back_populates="assignee"
     )
 
+    created_recurrence_schedules = db.relationship(
+        "RecurrenceSchedule",
+        foreign_keys="RecurrenceSchedule.created_by_id",
+        back_populates="creator"
+    )
+
+    assigned_recurrence_schedules = db.relationship(
+        "RecurrenceSchedule",
+        foreign_keys="RecurrenceSchedule.assigned_to_id",
+        back_populates="assignee"
+    )
+
     created_invitations = db.relationship(
         "FamilyInvitation",
         back_populates="creator"
@@ -113,6 +131,129 @@ class User(UserMixin, db.Model):
             "name": self.name,
             "email": self.email,
             "role": self.role
+        }
+
+
+class RecurrenceSchedule(db.Model):
+    __tablename__ = "recurrence_schedules"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    family_id = db.Column(
+        db.Integer,
+        db.ForeignKey("families.id"),
+        nullable=False,
+        index=True
+    )
+
+    created_by_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False
+    )
+
+    assigned_to_id = db.Column(
+        db.Integer,
+        db.ForeignKey("users.id"),
+        nullable=False
+    )
+
+    title = db.Column(db.String(160), nullable=False)
+    description = db.Column(db.Text)
+    planning_level = db.Column(db.String(30), nullable=False)
+
+    frequency = db.Column(db.String(20), nullable=False)
+
+    interval = db.Column(
+        db.Integer,
+        default=1,
+        nullable=False
+    )
+
+    # Comma-separated weekday numbers, where Monday=0 and Sunday=6.
+    # Example: "0,2,4" means Monday, Wednesday, and Friday.
+    # Used for weekly schedules; optional for other frequencies.
+    weekdays = db.Column(db.String(20))
+
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date)
+
+    is_active = db.Column(
+        db.Boolean,
+        default=True,
+        nullable=False
+    )
+
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "planning_level IN "
+            "('plan_together', 'share_responsibility', 'own_it')",
+            name="valid_recurrence_planning_level"
+        ),
+        CheckConstraint(
+            "frequency IN ('daily', 'weekly', 'monthly')",
+            name="valid_recurrence_frequency"
+        ),
+        CheckConstraint(
+            "interval >= 1",
+            name="valid_recurrence_interval"
+        ),
+        CheckConstraint(
+            "end_date IS NULL OR end_date >= start_date",
+            name="valid_recurrence_date_range"
+        ),
+    )
+
+    family = db.relationship(
+        "Family",
+        back_populates="recurrence_schedules"
+    )
+
+    creator = db.relationship(
+        "User",
+        foreign_keys=[created_by_id],
+        back_populates="created_recurrence_schedules"
+    )
+
+    assignee = db.relationship(
+        "User",
+        foreign_keys=[assigned_to_id],
+        back_populates="assigned_recurrence_schedules"
+    )
+
+    responsibilities = db.relationship(
+        "Responsibility",
+        back_populates="recurrence_schedule"
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "family_id": self.family_id,
+            "created_by_id": self.created_by_id,
+            "assigned_to_id": self.assigned_to_id,
+            "title": self.title,
+            "description": self.description,
+            "planning_level": self.planning_level,
+            "frequency": self.frequency,
+            "interval": self.interval,
+            "weekdays": self.weekdays,
+            "start_date": self.start_date.isoformat(),
+            "end_date": (
+                self.end_date.isoformat()
+                if self.end_date
+                else None
+            ),
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat(),
+            "creator_name": self.creator.name,
+            "assignee_name": self.assignee.name
         }
 
 
@@ -140,6 +281,13 @@ class Responsibility(db.Model):
         nullable=False
     )
 
+    recurrence_schedule_id = db.Column(
+        db.Integer,
+        db.ForeignKey("recurrence_schedules.id"),
+        nullable=True,
+        index=True
+    )
+
     title = db.Column(db.String(160), nullable=False)
     description = db.Column(db.Text)
     due_date = db.Column(db.Date, nullable=False)
@@ -163,6 +311,11 @@ class Responsibility(db.Model):
             "('plan_together', 'share_responsibility', 'own_it')",
             name="valid_planning_level"
         ),
+        UniqueConstraint(
+            "recurrence_schedule_id",
+            "due_date",
+            name="unique_recurrence_occurrence_date"
+        ),
     )
 
     family = db.relationship(
@@ -182,6 +335,11 @@ class Responsibility(db.Model):
         back_populates="assigned_responsibilities"
     )
 
+    recurrence_schedule = db.relationship(
+        "RecurrenceSchedule",
+        back_populates="responsibilities"
+    )
+
     steps = db.relationship(
         "Step",
         back_populates="responsibility",
@@ -194,6 +352,8 @@ class Responsibility(db.Model):
             "id": self.id,
             "family_id": self.family_id,
             "created_by_id": self.created_by_id,
+            "assigned_to_id": self.assigned_to_id,
+            "recurrence_schedule_id": self.recurrence_schedule_id,
             "assigned_to_id": self.assigned_to_id,
             "title": self.title,
             "description": self.description,

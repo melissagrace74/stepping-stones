@@ -184,6 +184,15 @@ class RecurrenceSchedule(db.Model):
         nullable=False
     )
 
+    # Earliest date eligible for new occurrence generation.
+    # Set when a paused schedule resumes, so missed dates
+    # from the paused period are not recreated.
+    # None means use the original start_date.
+    generate_from_date = db.Column(
+        db.Date,
+        nullable=True
+    )
+
     created_at = db.Column(
         db.DateTime(timezone=True),
         default=utc_now,
@@ -251,6 +260,11 @@ class RecurrenceSchedule(db.Model):
                 else None
             ),
             "is_active": self.is_active,
+            "generate_from_date": (
+                self.generate_from_date.isoformat()
+                if self.generate_from_date
+                else None
+            ),
             "created_at": self.created_at.isoformat(),
             "creator_name": self.creator.name,
             "assignee_name": self.assignee.name
@@ -354,7 +368,6 @@ class Responsibility(db.Model):
             "created_by_id": self.created_by_id,
             "assigned_to_id": self.assigned_to_id,
             "recurrence_schedule_id": self.recurrence_schedule_id,
-            "assigned_to_id": self.assigned_to_id,
             "title": self.title,
             "description": self.description,
             "due_date": self.due_date.isoformat(),

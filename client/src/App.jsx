@@ -63,6 +63,63 @@ function formatCreatedDate(value) {
   })
 }
 
+function localDateKey(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function getWeekDates() {
+  const today = new Date()
+  const monday = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  )
+
+  const daysSinceMonday = (monday.getDay() + 6) % 7
+  monday.setDate(monday.getDate() - daysSinceMonday)
+
+  const sunday = new Date(monday)
+  sunday.setDate(sunday.getDate() + 6)
+
+  return {
+    start: localDateKey(monday),
+    end: localDateKey(sunday),
+  }
+}
+
+function groupResponsibilities(responsibilities) {
+  const week = getWeekDates()
+
+  const groups = {
+    thisWeek: [],
+    upcoming: [],
+    completed: [],
+  }
+
+  const sorted = [...responsibilities].sort((a, b) => {
+    const firstDate = a.due_date || '9999-12-31'
+    const secondDate = b.due_date || '9999-12-31'
+
+    return firstDate.localeCompare(secondDate) || a.id - b.id
+  })
+
+  sorted.forEach((item) => {
+    if (item.is_complete) {
+      groups.completed.push(item)
+    } else if (!item.due_date || item.due_date <= week.end) {
+      groups.thisWeek.push(item)
+    } else {
+      groups.upcoming.push(item)
+    }
+  })
+
+  return groups
+}
+
 async function readApi(response) {
   const data = await response.json()
 
@@ -79,6 +136,120 @@ async function readApi(response) {
   }
 
   return data
+}
+
+function ResponsibilityCard({ item, onOpen, disabled }) {
+  return (
+    <button
+      type="button"
+      className="responsibility-card responsibility-button"
+      onClick={() => onOpen(item.id)}
+      disabled={disabled}
+    >
+      <div className="card-top">
+        <span
+          className={`planning-badge ${planningClass(
+            item.planning_level
+          )}`}
+        >
+          {planningLabels[item.planning_level] ||
+            item.planning_level}
+        </span>
+
+        {item.is_complete ? (
+          <CheckCircle2 size={23} />
+        ) : (
+          <Circle size={23} />
+        )}
+      </div>
+
+      <h3>{item.title}</h3>
+      <p>{item.description}</p>
+
+      <div className="card-meta">
+        <span>
+          <UserRound size={15} />
+          Assigned to <strong>{item.assignee_name}</strong>
+        </span>
+
+        <span className="created-date">
+          <CalendarPlus2 size={15} />
+          Created {formatCreatedDate(item.created_at)}
+        </span>
+
+        <span className="due-date">
+          <CalendarCheck2 size={15} />
+          Due <strong>{formatDate(item.due_date)}</strong>
+        </span>
+      </div>
+
+      <div className="card-progress">
+        <span>
+          {item.completed_steps || 0} of{' '}
+          {item.total_steps || 0} steps complete
+        </span>
+
+        <span className="view-steps-label">
+          View steps <ArrowRight size={18} />
+        </span>
+      </div>
+    </button>
+  )
+}
+
+function ResponsibilitySection({
+  title,
+  eyebrow,
+  items,
+  emptyMessage,
+  onOpen,
+  disabled,
+}) {
+  return (
+    <section
+      className="responsibilities-section"
+      style={{ marginBottom: '48px' }}
+    >
+      <div className="section-heading">
+        <div>
+          <span className="eyebrow">{eyebrow}</span>
+          <h2>
+            {title}{' '}
+            <span
+              style={{
+                fontSize: '15px',
+                fontWeight: 600,
+                color: '#789781',
+                letterSpacing: 0,
+              }}
+            >
+              ({items.length})
+            </span>
+          </h2>
+        </div>
+      </div>
+
+      {items.length > 0 ? (
+        <div className="responsibility-grid">
+          {items.map((item) => (
+            <ResponsibilityCard
+              key={item.id}
+              item={item}
+              onOpen={onOpen}
+              disabled={disabled}
+            />
+          ))}
+        </div>
+      ) : (
+        <div
+          className="empty-state"
+          style={{ padding: '32px 24px' }}
+        >
+          <p style={{ margin: 0 }}>{emptyMessage}</p>
+        </div>
+      )}
+    </section>
+  )
 }
 
 function App() {
@@ -301,7 +472,9 @@ function App() {
       const nextPosition =
         existingSteps.length === 0
           ? 0
-          : Math.max(...existingSteps.map((step) => step.position ?? 0)) + 1
+          : Math.max(
+              ...existingSteps.map((step) => step.position ?? 0)
+            ) + 1
 
       const response = await fetch(
         `/api/responsibilities/${selectedResponsibility.id}/steps`,
@@ -404,6 +577,8 @@ function App() {
       (item) => item.is_complete
     ).length
 
+    const grouped = groupResponsibilities(responsibilities)
+
     const canEditSteps =
       selectedResponsibility &&
       user.id === selectedResponsibility.created_by_id
@@ -449,7 +624,9 @@ function App() {
                 <span className="eyebrow">
                   EVERY BIG STEP STARTS SMALL
                 </span>
+
                 <h1>New responsibility</h1>
+
                 <p className="detail-description">
                   Give your family a goal to work toward, together.
                 </p>
@@ -478,7 +655,9 @@ function App() {
 
                     <label htmlFor="responsibility-description">
                       Description
-                      <span className="optional-label"> (optional)</span>
+                      <span className="optional-label">
+                        {' '}(optional)
+                      </span>
                     </label>
                     <textarea
                       id="responsibility-description"
@@ -501,7 +680,9 @@ function App() {
                       }
                       required
                     >
-                      <option value="">Select a family member</option>
+                      <option value="">
+                        Select a family member
+                      </option>
                       {familyMembers.map((member) => (
                         <option key={member.id} value={member.id}>
                           {member.name} — {member.role}
@@ -562,7 +743,9 @@ function App() {
                       <button
                         type="submit"
                         className="primary-button"
-                        disabled={formSaving || familyMembers.length === 0}
+                        disabled={
+                          formSaving || familyMembers.length === 0
+                        }
                       >
                         {formSaving
                           ? 'Creating...'
@@ -595,8 +778,9 @@ function App() {
                     selectedResponsibility.planning_level
                   )}`}
                 >
-                  {planningLabels[selectedResponsibility.planning_level] ||
-                    selectedResponsibility.planning_level}
+                  {planningLabels[
+                    selectedResponsibility.planning_level
+                  ] || selectedResponsibility.planning_level}
                 </span>
 
                 <h1>{selectedResponsibility.title}</h1>
@@ -610,20 +794,26 @@ function App() {
                   <span>
                     <UserRound size={17} />
                     Assigned to{' '}
-                    <strong>{selectedResponsibility.assignee_name}</strong>
+                    <strong>
+                      {selectedResponsibility.assignee_name}
+                    </strong>
                   </span>
 
                   <span className="created-date">
                     <CalendarPlus2 size={17} />
                     Created{' '}
-                    {formatCreatedDate(selectedResponsibility.created_at)}
+                    {formatCreatedDate(
+                      selectedResponsibility.created_at
+                    )}
                   </span>
 
                   <span className="due-date">
                     <CalendarCheck2 size={17} />
                     Due{' '}
                     <strong>
-                      {formatDate(selectedResponsibility.due_date)}
+                      {formatDate(
+                        selectedResponsibility.due_date
+                      )}
                     </strong>
                   </span>
                 </div>
@@ -667,7 +857,9 @@ function App() {
                     className="responsibility-form"
                     onSubmit={handleAddStep}
                   >
-                    <label htmlFor="step-title">Step title</label>
+                    <label htmlFor="step-title">
+                      Step title
+                    </label>
                     <input
                       id="step-title"
                       type="text"
@@ -682,7 +874,9 @@ function App() {
 
                     <label htmlFor="step-due-date">
                       Due date
-                      <span className="optional-label"> (optional)</span>
+                      <span className="optional-label">
+                        {' '}(optional)
+                      </span>
                     </label>
                     <input
                       id="step-due-date"
@@ -712,9 +906,13 @@ function App() {
                       <button
                         type="submit"
                         className="primary-button"
-                        disabled={stepSaving || !stepTitle.trim()}
+                        disabled={
+                          stepSaving || !stepTitle.trim()
+                        }
                       >
-                        {stepSaving ? 'Saving...' : 'Save step'}
+                        {stepSaving
+                          ? 'Saving...'
+                          : 'Save step'}
                         <ArrowRight size={18} />
                       </button>
                     </div>
@@ -733,10 +931,15 @@ function App() {
                       <button
                         type="button"
                         className={`step-item ${
-                          step.is_complete ? 'step-completed' : ''
+                          step.is_complete
+                            ? 'step-completed'
+                            : ''
                         }`}
                         key={step.id}
-                        disabled={!canToggleSteps || savingStepId !== null}
+                        disabled={
+                          !canToggleSteps ||
+                          savingStepId !== null
+                        }
                         onClick={() => toggleStep(step)}
                         aria-label={`${
                           step.is_complete
@@ -750,7 +953,9 @@ function App() {
                           <Circle size={23} />
                         )}
 
-                        <span className="step-title">{step.title}</span>
+                        <span className="step-title">
+                          {step.title}
+                        </span>
 
                         {step.due_date && (
                           <span className="step-date">
@@ -764,7 +969,9 @@ function App() {
                   <div className="empty-state">
                     <Footprints size={30} />
                     <h3>No steps yet</h3>
-                    <p>Preparation steps will appear here.</p>
+                    <p>
+                      Preparation steps will appear here.
+                    </p>
                   </div>
                 )}
               </div>
@@ -775,9 +982,11 @@ function App() {
                 <span className="eyebrow">
                   {family?.name || 'YOUR FAMILY'}
                 </span>
+
                 <h1>
                   Good to see you, {user.name.split(' ')[0]}!
                 </h1>
+
                 <p>
                   Every little step counts. Here's what your family
                   is working on together.
@@ -789,20 +998,26 @@ function App() {
                   <span>Responsibilities</span>
                   <strong>{responsibilities.length}</strong>
                 </div>
+
                 <div className="stat-card">
                   <span>Completed</span>
                   <strong>{completed}</strong>
                 </div>
+
                 <div className="stat-card">
                   <span>In progress</span>
-                  <strong>{responsibilities.length - completed}</strong>
+                  <strong>
+                    {responsibilities.length - completed}
+                  </strong>
                 </div>
               </div>
 
               <section className="responsibilities-section">
                 <div className="section-heading">
                   <div>
-                    <span className="eyebrow">ONE STEP AT A TIME</span>
+                    <span className="eyebrow">
+                      ONE STEP AT A TIME
+                    </span>
                     <h2>Family responsibilities</h2>
                   </div>
 
@@ -825,71 +1040,48 @@ function App() {
                 )}
 
                 {dashboardLoading ? (
-                  <p>Loading your family's responsibilities...</p>
+                  <p>
+                    Loading your family's responsibilities...
+                  </p>
                 ) : responsibilities.length === 0 ? (
                   <div className="empty-state">
                     <Footprints size={34} />
-                    <h3>Every journey starts with one step.</h3>
-                    <p>Your family's responsibilities will appear here.</p>
+                    <h3>
+                      Every journey starts with one step.
+                    </h3>
+                    <p>
+                      Your family's responsibilities will
+                      appear here.
+                    </p>
                   </div>
                 ) : (
-                  <div className="responsibility-grid">
-                    {responsibilities.map((item) => (
-                      <button
-                        type="button"
-                        className="responsibility-card responsibility-button"
-                        key={item.id}
-                        onClick={() => openResponsibility(item.id)}
-                        disabled={detailLoading}
-                      >
-                        <div className="card-top">
-                          <span
-                            className={`planning-badge ${planningClass(
-                              item.planning_level
-                            )}`}
-                          >
-                            {planningLabels[item.planning_level] ||
-                              item.planning_level}
-                          </span>
+                  <div style={{ marginTop: '36px' }}>
+                    <ResponsibilitySection
+                      title="This Week"
+                      eyebrow="WHAT NEEDS ATTENTION"
+                      items={grouped.thisWeek}
+                      emptyMessage="Nothing due this week. You're all caught up!"
+                      onOpen={openResponsibility}
+                      disabled={detailLoading}
+                    />
 
-                          {item.is_complete ? (
-                            <CheckCircle2 size={23} />
-                          ) : (
-                            <Circle size={23} />
-                          )}
-                        </div>
+                    <ResponsibilitySection
+                      title="Upcoming"
+                      eyebrow="LOOKING AHEAD"
+                      items={grouped.upcoming}
+                      emptyMessage="No upcoming responsibilities yet."
+                      onOpen={openResponsibility}
+                      disabled={detailLoading}
+                    />
 
-                        <h3>{item.title}</h3>
-                        <p>{item.description}</p>
-
-                        <div className="card-meta">
-                          <span>
-                            <UserRound size={15} />
-                            Assigned to <strong>{item.assignee_name}</strong>
-                          </span>
-
-                          <span className="created-date">
-                            <CalendarPlus2 size={15} />
-                            Created {formatCreatedDate(item.created_at)}
-                          </span>
-
-                          <span className="due-date">
-                            <CalendarCheck2 size={15} />
-                            Due <strong>{formatDate(item.due_date)}</strong>
-                          </span>
-                        </div>
-
-                        <div className="card-progress">
-                          <span>
-                            {item.completed_steps || 0} of{' '}
-                            {item.total_steps || 0} steps complete
-                          </span>
-                          <span className="view-steps-label">
-                            View steps <ArrowRight size={18} />
-                          </span>
-                        </div>
-                      </button>
-                    ))}
+                    <ResponsibilitySection
+                      title="Completed"
+                      eyebrow="STEPS WORTH CELEBRATING"
+                      items={grouped.completed}
+                      emptyMessage="Completed responsibilities will appear here."
+                      onOpen={openResponsibility}
+                      disabled={detailLoading}
+                    />
                   </div>
                 )}
               </section>
@@ -949,7 +1141,9 @@ function App() {
           </p>
 
           <form onSubmit={handleLogin}>
-            <label htmlFor="email">Email address</label>
+            <label htmlFor="email">
+              Email address
+            </label>
 
             <div className="input-wrapper">
               <Mail size={19} />
@@ -958,33 +1152,51 @@ function App() {
                 type="email"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) =>
+                  setEmail(event.target.value)
+                }
                 required
               />
             </div>
 
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">
+              Password
+            </label>
 
             <div className="input-wrapper">
               <LockKeyhole size={19} />
 
               <input
                 id="password"
-                type={showPassword ? 'text' : 'password'}
+                type={
+                  showPassword ? 'text' : 'password'
+                }
                 placeholder="Enter your password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) =>
+                  setPassword(event.target.value)
+                }
                 required
               />
 
               <button
                 type="button"
                 className="password-toggle"
-                onClick={() => setShowPassword((current) => !current)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() =>
+                  setShowPassword((current) => !current)
+                }
+                aria-label={
+                  showPassword
+                    ? 'Hide password'
+                    : 'Show password'
+                }
                 aria-pressed={showPassword}
               >
-                {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                {showPassword ? (
+                  <EyeOff size={19} />
+                ) : (
+                  <Eye size={19} />
+                )}
               </button>
             </div>
 
@@ -999,13 +1211,16 @@ function App() {
               type="submit"
               disabled={loading}
             >
-              {loading ? 'Signing in...' : 'Sign in'}
+              {loading
+                ? 'Signing in...'
+                : 'Sign in'}
               <ArrowRight size={18} />
             </button>
           </form>
 
           <p className="signup-note">
-            New to Stepping Stones? Family registration is coming next.
+            New to Stepping Stones? Family registration
+            is coming next.
           </p>
         </div>
       </section>

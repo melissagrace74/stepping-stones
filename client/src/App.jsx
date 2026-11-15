@@ -1,5 +1,7 @@
 
 import { useEffect, useState } from 'react'
+import { useNavigate, useMatch } from 'react-router-dom'
+import AppRoutes from './components/AppRoutes'
 import {
   Footprints,
   LogOut,
@@ -138,6 +140,10 @@ async function readApi(response) {
 }
 
 function App() {
+  const navigate = useNavigate()
+  const detailMatch = useMatch('/responsibilities/:id')
+  const routeResponsibilityId = detailMatch?.params.id
+  const [sessionLoading, setSessionLoading] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -145,7 +151,6 @@ function App() {
   const [error, setError] = useState('')
   const [user, setUser] = useState(null)
   const [family, setFamily] = useState(null)
-  const [authScreen, setAuthScreen] = useState('login')
 
   const [responsibilities, setResponsibilities] = useState([])
   const [dashboardLoading, setDashboardLoading] = useState(false)
@@ -153,9 +158,6 @@ function App() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [savingStepId, setSavingStepId] = useState(null)
 
-  const [showNewForm, setShowNewForm] = useState(false)
-  const [showSeriesManager, setShowSeriesManager] = useState(false)
-  const [showManageFamily, setShowManageFamily] = useState(false)
   const [familyMembers, setFamilyMembers] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [formLoading, setFormLoading] = useState(false)
@@ -185,21 +187,85 @@ function App() {
   const [completionConfirm, setCompletionConfirm] = useState(false)
 
   useEffect(() => {
+    let active = true
+
     async function restoreSession() {
       try {
         const response = await fetch('/api/auth/me', {
           credentials: 'include',
         })
-        if (!response.ok) return
-        const data = await response.json()
-        setUser(data.user)
-        setFamily(data.family)
+        if (response.ok) {
+          const data = await response.json()
+          if (active) {
+            setUser(data.user)
+            setFamily(data.family)
+          }
+        }
       } catch {
-        // Show login if the session cannot be restored.
+        // Unavailable sessions show the sign-in screen.
+      } finally {
+        if (active) setSessionLoading(false)
       }
     }
+
     restoreSession()
+    return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    if (!user || !routeResponsibilityId) return
+    let active = true
+    setSelectedResponsibility(null)
+    setDetailLoading(true)
+    setError('')
+    setShowStepForm(false)
+    setShowEditForm(false)
+    setDeleteConfirm(false)
+    setCompletionConfirm(false)
+
+    async function loadDetail() {
+      try {
+        const response = await fetch(
+          `/api/responsibilities/${encodeURIComponent(routeResponsibilityId)}`,
+          { credentials: 'include' }
+        )
+        const data = await readApi(response)
+        if (active) setSelectedResponsibility(data.responsibility)
+      } catch (err) {
+        if (active) setError(err.message)
+      } finally {
+        if (active) setDetailLoading(false)
+      }
+    }
+
+    loadDetail()
+    return () => { active = false }
+  }, [user, routeResponsibilityId])
+
+  useEffect(() => {
+    if (!user || user.role !== 'parent') return
+    if (window.location.pathname !== '/responsibilities/new') return
+    let active = true
+    setFormLoading(true)
+    setFormError('')
+
+    async function loadMembers() {
+      try {
+        const response = await fetch('/api/auth/family-members', {
+          credentials: 'include',
+        })
+        const data = await readApi(response)
+        if (active) setFamilyMembers(data.members || [])
+      } catch (err) {
+        if (active) setFormError(err.message)
+      } finally {
+        if (active) setFormLoading(false)
+      }
+    }
+
+    loadMembers()
+    return () => { active = false }
+  }, [user, navigate])
 
   useEffect(() => {
     if (!user) return
@@ -254,6 +320,7 @@ function App() {
       setFamily(data.family)
       setPassword('')
       setShowPassword(false)
+      navigate('/dashboard', { replace: true })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -268,7 +335,7 @@ function App() {
     setEmail('')
     setPassword('')
     setShowPassword(false)
-    setAuthScreen('login')
+    navigate('/dashboard', { replace: true })
   }
 
   async function handleLogout() {
@@ -283,9 +350,6 @@ function App() {
       setFamily(null)
       setResponsibilities([])
       setSelectedResponsibility(null)
-      setShowNewForm(false)
-      setShowSeriesManager(false)
-      setShowManageFamily(false)
       setFamilyMembers([])
       setForm({ ...emptyForm })
       setShowStepForm(false)
@@ -297,6 +361,7 @@ function App() {
       setEmail('')
       setPassword('')
       setShowPassword(false)
+      navigate('/login', { replace: true })
     } catch (err) {
       setError(err.message)
     }
@@ -304,19 +369,12 @@ function App() {
 
   function openManageFamily() {
     setError('')
-    setSelectedResponsibility(null)
-    setShowNewForm(false)
-    setShowSeriesManager(false)
-    setShowStepForm(false)
-    setShowEditForm(false)
-    setDeleteConfirm(false)
-    setCompletionConfirm(false)
-    setShowManageFamily(true)
+    navigate('/family')
   }
 
   function closeManageFamily() {
-    setShowManageFamily(false)
     setError('')
+    navigate('/dashboard')
   }
 
   function closeDetail() {
@@ -328,31 +386,13 @@ function App() {
     setStepError('')
     setEditError('')
     setError('')
+    navigate('/dashboard')
   }
 
-  async function openResponsibility(id) {
+  function openResponsibility(id) {
     setError('')
-    setStepError('')
-    setEditError('')
-    setShowStepForm(false)
-    setShowEditForm(false)
-    setDeleteConfirm(false)
-    setCompletionConfirm(false)
-    setStepTitle('')
-    setStepDueDate('')
-    setDetailLoading(true)
-
-    try {
-      const response = await fetch(`/api/responsibilities/${id}`, {
-        credentials: 'include',
-      })
-      const data = await readApi(response)
-      setSelectedResponsibility(data.responsibility)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setDetailLoading(false)
-    }
+    setSelectedResponsibility(null)
+    navigate(`/responsibilities/${id}`)
   }
 
   async function refreshResponsibility(id) {
@@ -605,7 +645,7 @@ function App() {
     setFormError('')
     setForm({ ...emptyForm })
     setFormLoading(true)
-    setShowNewForm(true)
+    navigate('/responsibilities/new')
 
     try {
       const response = await fetch('/api/auth/family-members', {
@@ -647,7 +687,7 @@ function App() {
   }
 
   function closeNewForm() {
-    setShowNewForm(false)
+    navigate('/dashboard')
     setFormError('')
     setForm({ ...emptyForm })
   }
@@ -723,7 +763,7 @@ function App() {
     }
   }
 
-  if (user) {
+  if (user && !sessionLoading) {
     const visibleResponsibilities =
       user.role === 'child'
         ? responsibilities.filter(
@@ -779,7 +819,7 @@ function App() {
                 className="logout-button"
                 onClick={openManageFamily}
                 aria-current={
-                  showManageFamily ? 'page' : undefined
+                  window.location.pathname === '/family' ? 'page' : undefined
                 }
               >
                 <Users size={18} />
@@ -799,19 +839,38 @@ function App() {
         </header>
 
         <div className="dashboard-content">
-          {showManageFamily && user.role === 'parent' ? (
-            <ManageFamily
+          <AppRoutes
+            user={user}
+            sessionLoading={false}
+            loginPage={null}
+            registerPage={null}
+            dashboardPage={
+<Dashboard
               family={family}
               user={user}
-              onBack={closeManageFamily}
+              responsibilities={visibleResponsibilities}
+              completed={completed}
+              grouped={grouped}
+              error={error}
+              dashboardLoading={dashboardLoading}
+              detailLoading={detailLoading}
+              openResponsibility={openResponsibility}
+              openNewForm={openNewForm}
+              setError={setError}
+              setShowSeriesManager={(show) => { if (show) { setError(''); navigate('/series') } else navigate('/dashboard') }}
             />
-          ) : showSeriesManager ? (
-            <SeriesManager
-              currentUserId={user.id}
-              onChanged={reloadResponsibilities}
-              onBack={() => setShowSeriesManager(false)}
-            />
-          ) : showNewForm ? (
+            }
+            familyPage={
+              <ManageFamily family={family} user={user} onBack={closeManageFamily} />
+            }
+            seriesPage={
+              <SeriesManager
+                currentUserId={user.id}
+                onChanged={reloadResponsibilities}
+                onBack={() => navigate('/dashboard')}
+              />
+            }
+            newResponsibilityPage={
             <ResponsibilityForm
               form={form}
               familyMembers={familyMembers}
@@ -824,7 +883,11 @@ function App() {
               updateFrequency={updateFrequency}
               toggleWeekday={toggleWeekday}
             />
-          ) : selectedResponsibility ? (
+            }
+            responsibilityDetailPage={
+              detailLoading ? (
+                <p role="status">Loading responsibility...</p>
+              ) : selectedResponsibility ? (
             <ResponsibilityDetail
               selectedResponsibility={selectedResponsibility}
               closeDetail={closeDetail}
@@ -870,54 +933,47 @@ function App() {
               formatDate={formatDate}
               formatCreatedDate={formatCreatedDate}
             />
-          ) : (
-            <Dashboard
-              family={family}
-              user={user}
-              responsibilities={visibleResponsibilities}
-              completed={completed}
-              grouped={grouped}
-              error={error}
-              dashboardLoading={dashboardLoading}
-              detailLoading={detailLoading}
-              openResponsibility={openResponsibility}
-              openNewForm={openNewForm}
-              setError={setError}
-              setShowSeriesManager={setShowSeriesManager}
-            />
-          )}
+              ) : (
+                <section className="detail-view">
+                  <p className="form-error" role="alert">
+                    {error || 'Responsibility not found.'}
+                  </p>
+                  <button className="back-button" onClick={closeDetail}>
+                    Back to dashboard
+                  </button>
+                </section>
+              )
+            }
+          />
         </div>
       </main>
     )
   }
 
-  if (authScreen === 'register') {
-    return (
-      <Register
-        onRegistered={handleRegistered}
-        onBack={() => {
-          setError('')
-          setAuthScreen('login')
-        }}
-      />
-    )
-  }
-
   return (
-    <Login
-      email={email}
-      setEmail={setEmail}
-      password={password}
-      setPassword={setPassword}
-      showPassword={showPassword}
-      setShowPassword={setShowPassword}
-      loading={loading}
-      error={error}
-      onLogin={handleLogin}
-      onRegister={() => {
-        setError('')
-        setAuthScreen('register')
-      }}
+    <AppRoutes
+      user={user}
+      sessionLoading={sessionLoading}
+      loginPage={
+        <Login
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          showPassword={showPassword}
+          setShowPassword={setShowPassword}
+          loading={loading}
+          error={error}
+          onLogin={handleLogin}
+          onRegister={() => { setError(''); navigate('/register') }}
+        />
+      }
+      registerPage={
+        <Register
+          onRegistered={handleRegistered}
+          onBack={() => { setError(''); navigate('/login') }}
+        />
+      }
     />
   )
 }

@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Circle,
   Pencil,
+  PencilLine,
   Plus,
   Repeat2,
   Trash2,
@@ -108,6 +109,14 @@ export default function ResponsibilityDetail({
             <UserRound size={17} />
             Assigned to{' '}
             <strong>{selectedResponsibility.assignee_name}</strong>
+          </span>
+
+          <span>
+            <PencilLine size={17} />
+            Created by{' '}
+            <strong>
+              {selectedResponsibility.creator_name || 'a family member'}
+            </strong>
           </span>
 
           <span className="created-date">

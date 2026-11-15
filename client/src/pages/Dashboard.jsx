@@ -73,6 +73,7 @@ function CompactTaskList({
   onOpen,
   disabled,
   emptyMessage,
+  showCreator = false,
 }) {
   if (items.length === 0) {
     return (
@@ -101,8 +102,13 @@ function CompactTaskList({
             <Circle size={19} />
           )}
 
-          <span className="compact-task-title">
-            {item.title}
+          <span className="compact-task-title" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '3px' }}>
+            <span>{item.title}</span>
+            {showCreator && (
+              <span style={{ fontSize: '12px', fontWeight: 400, color: '#62746a', lineHeight: 1.4 }}>
+                Created by {item.creator_name || 'a family member'}
+              </span>
+            )}
           </span>
 
           {item.due_date && (
@@ -158,8 +164,22 @@ function MemberPanel({
 
   const total = memberResponsibilities.length
 
+  // Each responsibility contributes equally to overall progress.
+  // Preparation steps show partial progress; a completed responsibility
+  // counts as fully complete, even when some steps remain unfinished.
+  const progressTotal = memberResponsibilities.reduce((sum, item) => {
+    if (item.is_complete) return sum + 1
+
+    const totalSteps = Number(item.total_steps) || 0
+    const completedSteps = Number(item.completed_steps) || 0
+
+    if (totalSteps === 0) return sum
+
+    return sum + Math.min(1, Math.max(0, completedSteps / totalSteps))
+  }, 0)
+
   const progress = total > 0
-    ? Math.round((completedCount / total) * 100)
+    ? Math.round((progressTotal / total) * 100)
     : 0
 
   return (
@@ -206,6 +226,10 @@ function MemberPanel({
       </div>
 
       <p className="member-progress-label">
+        Overall progress · Includes preparation steps
+      </p>
+
+      <p className="member-progress-label">
         {completedCount} of {total} responsibilities completed
       </p>
 
@@ -219,6 +243,7 @@ function MemberPanel({
         onOpen={openResponsibility}
         disabled={detailLoading}
         emptyMessage="Nothing needs attention this week."
+        showCreator
       />
 
       {expanded && (
@@ -233,6 +258,7 @@ function MemberPanel({
             onOpen={openResponsibility}
             disabled={detailLoading}
             emptyMessage="No upcoming responsibilities."
+            showCreator
           />
 
           <div className="member-task-heading">
@@ -245,6 +271,7 @@ function MemberPanel({
             onOpen={openResponsibility}
             disabled={detailLoading}
             emptyMessage="No completed responsibilities yet."
+            showCreator
           />
         </div>
       )}
@@ -407,24 +434,26 @@ export default function Dashboard({
         </p>
       </div>
 
+      {!isParent && (
       <div className="dashboard-stats">
-        <div className="stat-card">
-          <span>Responsibilities</span>
-          <strong>{responsibilities.length}</strong>
+          <div className="stat-card">
+            <span>Responsibilities</span>
+            <strong>{responsibilities.length}</strong>
+          </div>
+  
+          <div className="stat-card">
+            <span>Completed</span>
+            <strong>{completed}</strong>
+          </div>
+  
+          <div className="stat-card">
+            <span>In progress</span>
+            <strong>
+              {responsibilities.length - completed}
+            </strong>
+          </div>
         </div>
-
-        <div className="stat-card">
-          <span>Completed</span>
-          <strong>{completed}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>In progress</span>
-          <strong>
-            {responsibilities.length - completed}
-          </strong>
-        </div>
-      </div>
+      )}
 
       {isParent && !dashboardLoading && !membersLoading && !membersError && (
         <section className="responsibilities-section" aria-labelledby="family-activity-heading" style={{ marginBottom: '40px' }}>
@@ -635,6 +664,7 @@ export default function Dashboard({
                     onOpen={openResponsibility}
                     disabled={detailLoading}
                     emptyMessage="No other responsibilities."
+                    showCreator
                   />
                 </section>
               )}

@@ -1,3 +1,4 @@
+
 import {
   ArrowRight,
   CalendarCheck2,
@@ -5,6 +6,7 @@ import {
   CheckCircle2,
   Repeat2,
   UserRound,
+  PencilLine,
 } from 'lucide-react'
 
 const planningLabels = {
@@ -97,10 +99,17 @@ export default function ResponsibilityCard({ item, onOpen, disabled }) {
           <UserRound size={15} />
           Assigned to <strong>{item.assignee_name}</strong>
         </span>
+
+        <span>
+          <PencilLine size={15} />
+          Created by <strong>{item.creator_name || 'a family member'}</strong>
+        </span>
+
         <span className="created-date">
           <CalendarPlus2 size={15} />
           Created {formatCreatedDate(item.created_at)}
         </span>
+
         <span className="due-date">
           <CalendarCheck2 size={15} />
           Due <strong>{formatDate(item.due_date)}</strong>

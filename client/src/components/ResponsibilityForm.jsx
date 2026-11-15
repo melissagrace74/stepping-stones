@@ -42,6 +42,10 @@ export default function ResponsibilityForm({
             : 'Give your family a goal to work toward, together.'}
         </p>
 
+        <p style={{ fontSize: '13px', color: '#62746a', marginBottom: '20px' }}>
+          * Required fields
+        </p>
+
         {formLoading && !isChild ? (
           <p>Loading family members...</p>
         ) : (
@@ -50,7 +54,7 @@ export default function ResponsibilityForm({
             onSubmit={handleCreateResponsibility}
           >
             <label htmlFor="responsibility-title">
-              Responsibility title
+              Responsibility title *
             </label>
             <input
               id="responsibility-title"
@@ -87,7 +91,7 @@ export default function ResponsibilityForm({
             ) : (
               <>
                 <label htmlFor="responsibility-assignee">
-                  Assign to
+                  Assign to *
                 </label>
                 <select
                   id="responsibility-assignee"
@@ -111,8 +115,8 @@ export default function ResponsibilityForm({
 
             <label htmlFor="responsibility-date">
               {!isChild && form.frequency !== 'none'
-                ? 'First due date'
-                : 'Due date'}
+                ? 'First due date *'
+                : 'Due date *'}
             </label>
             <input
               id="responsibility-date"
@@ -125,7 +129,7 @@ export default function ResponsibilityForm({
             />
 
             <label htmlFor="responsibility-level">
-              Planning level
+              Planning level *
             </label>
             <select
               id="responsibility-level"
@@ -186,7 +190,7 @@ export default function ResponsibilityForm({
                 {form.frequency !== 'none' && (
                   <>
                     <label htmlFor="responsibility-interval">
-                      Repeat every
+                      Repeat every *
                     </label>
 
                     <div
@@ -236,7 +240,7 @@ export default function ResponsibilityForm({
                             marginBottom: '12px',
                           }}
                         >
-                          Repeat on
+                          Repeat on *
                         </legend>
 
                         <div
@@ -290,7 +294,7 @@ export default function ResponsibilityForm({
                     )}
 
                     <label htmlFor="responsibility-end-date">
-                      Repeat until
+                      End date
                       <span className="optional-label">
                         {' '}(optional)
                       </span>
@@ -313,7 +317,7 @@ export default function ResponsibilityForm({
                         marginTop: '10px',
                       }}
                     >
-                      Leave this blank to keep repeating.
+                      Leave blank for an ongoing responsibility.
                       Stepping Stones creates upcoming
                       responsibilities as time moves forward.
                     </p>

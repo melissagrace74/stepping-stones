@@ -7,6 +7,7 @@ import {
   PauseCircle,
   PlayCircle,
   Repeat2,
+  Plus,
   Trash2,
   UserRound,
 } from 'lucide-react'
@@ -85,6 +86,7 @@ async function readApi(response) {
 export default function SeriesManager({
   onBack,
   onChanged,
+  onNewSeries,
   currentUserId,
 }) {
   const [schedules, setSchedules] = useState([])
@@ -462,7 +464,15 @@ export default function SeriesManager({
       </button>
 
       <div style={{ marginBottom: '32px' }}>
-        <span className="eyebrow">
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '20px',
+        }}>
+          <div>
+            <span className="eyebrow">
           BUILDING ROUTINES, ONE STEP AT A TIME
         </span>
 
@@ -473,6 +483,17 @@ export default function SeriesManager({
           series when life gets busy, resume it when you're
           ready, or remove one you no longer need.
         </p>
+          </div>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={onNewSeries}
+            disabled={busyId !== null}
+          >
+            <Plus size={18} />
+            New recurring series
+          </button>
+        </div>
       </div>
 
       {error && (

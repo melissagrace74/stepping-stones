@@ -142,10 +142,7 @@ async function readApi(response) {
 function App() {
   const navigate = useNavigate()
   const detailMatch = useMatch('/responsibilities/:id')
-  const routeResponsibilityId =
-    detailMatch?.params.id && /^\d+$/.test(detailMatch.params.id)
-      ? detailMatch.params.id
-      : null
+  const routeResponsibilityId = detailMatch?.params.id
   const [sessionLoading, setSessionLoading] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -166,6 +163,7 @@ function App() {
   const [formLoading, setFormLoading] = useState(false)
   const [formSaving, setFormSaving] = useState(false)
   const [formError, setFormError] = useState('')
+  const [creatingFromSeries, setCreatingFromSeries] = useState(false)
 
   const [showStepForm, setShowStepForm] = useState(false)
   const [stepTitle, setStepTitle] = useState('')
@@ -648,12 +646,15 @@ function App() {
     }
   }
 
-  async function openNewForm() {
+  async function openNewForm(recurring = false) {
+    const fromSeries = recurring === true
+    setCreatingFromSeries(fromSeries)
     setError('')
     setFormError('')
     setForm({
       ...emptyForm,
       assigned_to_id: user?.role === 'child' ? String(user.id) : '',
+      frequency: fromSeries ? 'weekly' : 'none',
     })
     setFamilyMembers([])
     setFormLoading(user?.role === 'parent')
@@ -701,7 +702,8 @@ function App() {
   }
 
   function closeNewForm() {
-    navigate('/dashboard')
+    navigate(creatingFromSeries ? '/series' : '/dashboard')
+    setCreatingFromSeries(false)
     setFormError('')
     setForm({ ...emptyForm })
   }
@@ -883,6 +885,7 @@ function App() {
               <SeriesManager
                 currentUserId={user.id}
                 onChanged={reloadResponsibilities}
+                onNewSeries={() => openNewForm(true)}
                 onBack={() => navigate('/dashboard')}
               />
             }

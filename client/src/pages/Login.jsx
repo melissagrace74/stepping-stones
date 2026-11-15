@@ -5,7 +5,7 @@ import {
   EyeOff,
   Footprints,
   LockKeyhole,
-  Mail,
+  UserRound,
 } from 'lucide-react'
 
 export default function Login({
@@ -70,15 +70,16 @@ export default function Login({
           </p>
 
           <form onSubmit={onLogin}>
-            <label htmlFor="email">Email address</label>
+            <label htmlFor="email">Email or username</label>
 
             <div className="input-wrapper">
-              <Mail size={19} />
+              <UserRound size={19} />
 
               <input
                 id="email"
-                type="email"
-                placeholder="you@example.com"
+                type="text"
+                placeholder="Enter your email or username"
+                autoComplete="username"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
@@ -94,6 +95,7 @@ export default function Login({
                 id="password"
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter your password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required

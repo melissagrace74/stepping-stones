@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import {
   Footprints,
   LogOut,
+  Users,
 } from 'lucide-react'
 import ResponsibilityForm from './components/ResponsibilityForm'
 import Login from './pages/Login'
@@ -10,6 +11,7 @@ import Register from './pages/Register'
 import SeriesManager from './pages/SeriesManager'
 import ResponsibilityDetail from './pages/ResponsibilityDetail'
 import Dashboard from './pages/Dashboard'
+import ManageFamily from './pages/ManageFamily'
 import './App.css'
 
 const planningLabels = {
@@ -153,6 +155,7 @@ function App() {
 
   const [showNewForm, setShowNewForm] = useState(false)
   const [showSeriesManager, setShowSeriesManager] = useState(false)
+  const [showManageFamily, setShowManageFamily] = useState(false)
   const [familyMembers, setFamilyMembers] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [formLoading, setFormLoading] = useState(false)
@@ -282,6 +285,7 @@ function App() {
       setSelectedResponsibility(null)
       setShowNewForm(false)
       setShowSeriesManager(false)
+      setShowManageFamily(false)
       setFamilyMembers([])
       setForm({ ...emptyForm })
       setShowStepForm(false)
@@ -296,6 +300,23 @@ function App() {
     } catch (err) {
       setError(err.message)
     }
+  }
+
+  function openManageFamily() {
+    setError('')
+    setSelectedResponsibility(null)
+    setShowNewForm(false)
+    setShowSeriesManager(false)
+    setShowStepForm(false)
+    setShowEditForm(false)
+    setDeleteConfirm(false)
+    setCompletionConfirm(false)
+    setShowManageFamily(true)
+  }
+
+  function closeManageFamily() {
+    setShowManageFamily(false)
+    setError('')
   }
 
   function closeDetail() {
@@ -703,11 +724,18 @@ function App() {
   }
 
   if (user) {
-    const completed = responsibilities.filter(
+    const visibleResponsibilities =
+      user.role === 'child'
+        ? responsibilities.filter(
+            (item) => Number(item.assigned_to_id) === Number(user.id)
+          )
+        : responsibilities
+
+    const completed = visibleResponsibilities.filter(
       (item) => item.is_complete
     ).length
 
-    const grouped = groupResponsibilities(responsibilities)
+    const grouped = groupResponsibilities(visibleResponsibilities)
 
     const canEditSteps =
       selectedResponsibility &&
@@ -737,18 +765,47 @@ function App() {
             <span>stepping stones</span>
           </div>
 
-          <button
-            type="button"
-            className="logout-button"
-            onClick={handleLogout}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
           >
-            <LogOut size={18} />
-            Log out
-          </button>
+            {user.role === 'parent' && (
+              <button
+                type="button"
+                className="logout-button"
+                onClick={openManageFamily}
+                aria-current={
+                  showManageFamily ? 'page' : undefined
+                }
+              >
+                <Users size={18} />
+                Manage Family
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="logout-button"
+              onClick={handleLogout}
+            >
+              <LogOut size={18} />
+              Log out
+            </button>
+          </div>
         </header>
 
         <div className="dashboard-content">
-          {showSeriesManager ? (
+          {showManageFamily && user.role === 'parent' ? (
+            <ManageFamily
+              family={family}
+              user={user}
+              onBack={closeManageFamily}
+            />
+          ) : showSeriesManager ? (
             <SeriesManager
               currentUserId={user.id}
               onChanged={reloadResponsibilities}
@@ -817,7 +874,7 @@ function App() {
             <Dashboard
               family={family}
               user={user}
-              responsibilities={responsibilities}
+              responsibilities={visibleResponsibilities}
               completed={completed}
               grouped={grouped}
               error={error}

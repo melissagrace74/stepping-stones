@@ -16,6 +16,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import Login from './pages/Login'
+import SeriesManager from './pages/SeriesManager'
 import './App.css'
 
 const planningLabels = {
@@ -293,6 +294,7 @@ function App() {
   const [savingStepId, setSavingStepId] = useState(null)
 
   const [showNewForm, setShowNewForm] = useState(false)
+  const [showSeriesManager, setShowSeriesManager] = useState(false)
   const [familyMembers, setFamilyMembers] = useState([])
   const [form, setForm] = useState(emptyForm)
   const [formLoading, setFormLoading] = useState(false)
@@ -411,6 +413,7 @@ function App() {
       setResponsibilities([])
       setSelectedResponsibility(null)
       setShowNewForm(false)
+      setShowSeriesManager(false)
       setFamilyMembers([])
       setForm({ ...emptyForm })
       setShowStepForm(false)
@@ -877,7 +880,13 @@ function App() {
         </header>
 
         <div className="dashboard-content">
-          {showNewForm ? (
+          {showSeriesManager ? (
+            <SeriesManager
+              currentUserId={user.id}
+              onChanged={reloadResponsibilities}
+              onBack={() => setShowSeriesManager(false)}
+            />
+          ) : showNewForm ? (
             <section className="detail-view">
               <button
                 type="button"
@@ -1348,8 +1357,9 @@ function App() {
                       marginBottom: '20px',
                     }}
                   >
-                    You can edit this occurrence. Managing or deleting
-                    the full recurring schedule is coming next.
+                    You can edit this occurrence here. To pause, resume,
+                    or delete the full series, return to the dashboard
+                    and select Manage recurring series.
                   </p>
                 )}
 
@@ -1833,14 +1843,33 @@ function App() {
                   </div>
 
                   {user.role === 'parent' && (
-                    <button
-                      type="button"
-                      className="primary-button"
-                      onClick={openNewForm}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '12px',
+                      }}
                     >
-                      <Plus size={18} />
-                      New responsibility
-                    </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          setError('')
+                          setShowSeriesManager(true)
+                        }}
+                      >
+                        <Repeat2 size={18} />
+                        Manage recurring series
+                      </button>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={openNewForm}
+                      >
+                        <Plus size={18} />
+                        New responsibility
+                      </button>
+                    </div>
                   )}
                 </div>
 

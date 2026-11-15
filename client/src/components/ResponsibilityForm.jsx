@@ -1,8 +1,10 @@
+
 import { ArrowLeft, ArrowRight, Repeat2 } from 'lucide-react'
 
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export default function ResponsibilityForm({
+  user,
   form,
   familyMembers,
   formLoading,
@@ -14,6 +16,8 @@ export default function ResponsibilityForm({
   updateFrequency,
   toggleWeekday,
 }) {
+  const isChild = user?.role === 'child'
+
   return (
     <section className="detail-view">
       <button
@@ -33,10 +37,12 @@ export default function ResponsibilityForm({
         <h1>New responsibility</h1>
 
         <p className="detail-description">
-          Give your family a goal to work toward, together.
+          {isChild
+            ? 'Make a plan, set your deadline, and take the next step.'
+            : 'Give your family a goal to work toward, together.'}
         </p>
 
-        {formLoading ? (
+        {formLoading && !isChild ? (
           <p>Loading family members...</p>
         ) : (
           <form
@@ -74,31 +80,39 @@ export default function ResponsibilityForm({
               }
             />
 
-            <label htmlFor="responsibility-assignee">
-              Assign to
-            </label>
-            <select
-              id="responsibility-assignee"
-              value={form.assigned_to_id}
-              onChange={(event) =>
-                updateForm('assigned_to_id', event.target.value)
-              }
-              required
-            >
-              <option value="">
-                Select a family member
-              </option>
-              {familyMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} — {member.role}
-                </option>
-              ))}
-            </select>
+            {isChild ? (
+              <p className="detail-description">
+                <strong>Assigned to:</strong> {user.name} (you)
+              </p>
+            ) : (
+              <>
+                <label htmlFor="responsibility-assignee">
+                  Assign to
+                </label>
+                <select
+                  id="responsibility-assignee"
+                  value={form.assigned_to_id}
+                  onChange={(event) =>
+                    updateForm('assigned_to_id', event.target.value)
+                  }
+                  required
+                >
+                  <option value="">
+                    Select a family member
+                  </option>
+                  {familyMembers.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} — {member.role}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
 
             <label htmlFor="responsibility-date">
-              {form.frequency === 'none'
-                ? 'Due date'
-                : 'First due date'}
+              {!isChild && form.frequency !== 'none'
+                ? 'First due date'
+                : 'Due date'}
             </label>
             <input
               id="responsibility-date"
@@ -132,182 +146,181 @@ export default function ResponsibilityForm({
               </option>
             </select>
 
-            <div
-              style={{
-                marginTop: '12px',
-                paddingTop: '24px',
-                borderTop: '1px solid #e3e9e1',
-              }}
-            >
-              <span
-                className="eyebrow"
+            {!isChild && (
+              <div
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '16px',
+                  marginTop: '12px',
+                  paddingTop: '24px',
+                  borderTop: '1px solid #e3e9e1',
                 }}
               >
-                <Repeat2 size={17} />
-                MAKE IT A ROUTINE
-              </span>
+                <span
+                  className="eyebrow"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '16px',
+                  }}
+                >
+                  <Repeat2 size={17} />
+                  MAKE IT A ROUTINE
+                </span>
 
-              <select
-                id="responsibility-frequency"
-                aria-label="Repeat frequency"
-                value={form.frequency}
-                onChange={(event) =>
-                  updateFrequency(event.target.value)
-                }
-              >
-                <option value="none">
-                  Does not repeat
-                </option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
-              </select>
+                <select
+                  id="responsibility-frequency"
+                  aria-label="Repeat frequency"
+                  value={form.frequency}
+                  onChange={(event) =>
+                    updateFrequency(event.target.value)
+                  }
+                >
+                  <option value="none">
+                    Does not repeat
+                  </option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
 
-              {form.frequency !== 'none' && (
-                <>
-                  <label htmlFor="responsibility-interval">
-                    Repeat every
-                  </label>
+                {form.frequency !== 'none' && (
+                  <>
+                    <label htmlFor="responsibility-interval">
+                      Repeat every
+                    </label>
 
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                    }}
-                  >
-                    <input
-                      id="responsibility-interval"
-                      type="number"
-                      min="1"
-                      max="365"
-                      step="1"
-                      value={form.interval}
-                      onChange={(event) =>
-                        updateForm(
-                          'interval',
-                          event.target.value
-                        )
-                      }
-                      required
+                    <div
                       style={{
-                        width: '110px',
-                        flex: '0 0 110px',
-                      }}
-                    />
-                    <span>
-                      {form.frequency === 'daily'
-                        ? 'day(s)'
-                        : form.frequency === 'weekly'
-                          ? 'week(s)'
-                          : 'month(s)'}
-                    </span>
-                  </div>
-
-                  {form.frequency === 'weekly' && (
-                    <fieldset
-                      style={{
-                        border: 0,
-                        padding: 0,
-                        margin: '20px 0',
-                        minWidth: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
                       }}
                     >
-                      <legend
+                      <input
+                        id="responsibility-interval"
+                        type="number"
+                        min="1"
+                        max="365"
+                        step="1"
+                        value={form.interval}
+                        onChange={(event) =>
+                          updateForm('interval', event.target.value)
+                        }
+                        required
                         style={{
-                          fontWeight: 600,
-                          marginBottom: '12px',
+                          width: '110px',
+                          flex: '0 0 110px',
+                        }}
+                      />
+                      <span>
+                        {form.frequency === 'daily'
+                          ? 'day(s)'
+                          : form.frequency === 'weekly'
+                            ? 'week(s)'
+                            : 'month(s)'}
+                      </span>
+                    </div>
+
+                    {form.frequency === 'weekly' && (
+                      <fieldset
+                        style={{
+                          border: 0,
+                          padding: 0,
+                          margin: '20px 0',
+                          minWidth: 0,
                         }}
                       >
-                        Repeat on
-                      </legend>
+                        <legend
+                          style={{
+                            fontWeight: 600,
+                            marginBottom: '12px',
+                          }}
+                        >
+                          Repeat on
+                        </legend>
 
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: '8px',
-                        }}
-                      >
-                        {weekdayLabels.map((label, day) => {
-                          const selected =
-                            form.weekdays.includes(day)
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '8px',
+                          }}
+                        >
+                          {weekdayLabels.map((label, day) => {
+                            const selected =
+                              form.weekdays.includes(day)
 
-                          return (
-                            <button
-                              key={label}
-                              type="button"
-                              aria-pressed={selected}
-                              onClick={() => toggleWeekday(day)}
-                              style={{
-                                minWidth: '48px',
-                                padding: '10px 12px',
-                                borderRadius: '12px',
-                                border: selected
-                                  ? '2px solid #426f51'
-                                  : '1px solid #cddbd0',
-                                background: selected
-                                  ? '#e2eee4'
-                                  : '#ffffff',
-                                color: '#254a32',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              {label}
-                            </button>
-                          )
-                        })}
-                      </div>
+                            return (
+                              <button
+                                key={label}
+                                type="button"
+                                aria-pressed={selected}
+                                onClick={() => toggleWeekday(day)}
+                                style={{
+                                  minWidth: '48px',
+                                  padding: '10px 12px',
+                                  borderRadius: '12px',
+                                  border: selected
+                                    ? '2px solid #426f51'
+                                    : '1px solid #cddbd0',
+                                  background: selected
+                                    ? '#e2eee4'
+                                    : '#ffffff',
+                                  color: '#254a32',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {label}
+                              </button>
+                            )
+                          })}
+                        </div>
 
-                      <p
-                        style={{
-                          fontSize: '13px',
-                          marginTop: '10px',
-                          color: '#62746a',
-                        }}
-                      >
-                        Select one or more days of the week.
-                      </p>
-                    </fieldset>
-                  )}
+                        <p
+                          style={{
+                            fontSize: '13px',
+                            marginTop: '10px',
+                            color: '#62746a',
+                          }}
+                        >
+                          Select one or more days of the week.
+                        </p>
+                      </fieldset>
+                    )}
 
-                  <label htmlFor="responsibility-end-date">
-                    Repeat until
-                    <span className="optional-label">
-                      {' '}(optional)
-                    </span>
-                  </label>
-                  <input
-                    id="responsibility-end-date"
-                    type="date"
-                    min={form.due_date || undefined}
-                    value={form.end_date}
-                    onChange={(event) =>
-                      updateForm('end_date', event.target.value)
-                    }
-                  />
+                    <label htmlFor="responsibility-end-date">
+                      Repeat until
+                      <span className="optional-label">
+                        {' '}(optional)
+                      </span>
+                    </label>
+                    <input
+                      id="responsibility-end-date"
+                      type="date"
+                      min={form.due_date || undefined}
+                      value={form.end_date}
+                      onChange={(event) =>
+                        updateForm('end_date', event.target.value)
+                      }
+                    />
 
-                  <p
-                    style={{
-                      fontSize: '13px',
-                      color: '#62746a',
-                      lineHeight: 1.6,
-                      marginTop: '10px',
-                    }}
-                  >
-                    Leave this blank to keep repeating.
-                    Stepping Stones creates upcoming
-                    responsibilities as time moves forward.
-                  </p>
-                </>
-              )}
-            </div>
+                    <p
+                      style={{
+                        fontSize: '13px',
+                        color: '#62746a',
+                        lineHeight: 1.6,
+                        marginTop: '10px',
+                      }}
+                    >
+                      Leave this blank to keep repeating.
+                      Stepping Stones creates upcoming
+                      responsibilities as time moves forward.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
 
             {formError && (
               <p className="form-error" role="alert">
@@ -328,12 +341,13 @@ export default function ResponsibilityForm({
                 type="submit"
                 className="primary-button"
                 disabled={
-                  formSaving || familyMembers.length === 0
+                  formSaving ||
+                  (!isChild && familyMembers.length === 0)
                 }
               >
                 {formSaving
                   ? 'Creating...'
-                  : form.frequency === 'none'
+                  : isChild || form.frequency === 'none'
                     ? 'Create responsibility'
                     : 'Create recurring responsibility'}
                 <ArrowRight size={18} />

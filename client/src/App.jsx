@@ -142,7 +142,10 @@ async function readApi(response) {
 function App() {
   const navigate = useNavigate()
   const detailMatch = useMatch('/responsibilities/:id')
-  const routeResponsibilityId = detailMatch?.params.id
+  const routeResponsibilityId =
+    detailMatch?.params.id && /^\d+$/.test(detailMatch.params.id)
+      ? detailMatch.params.id
+      : null
   const [sessionLoading, setSessionLoading] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -465,8 +468,13 @@ function App() {
       due_date: selectedResponsibility.due_date || '',
       planning_level: selectedResponsibility.planning_level,
     })
-    setEditLoading(true)
+    setEditLoading(user?.role === 'parent')
     setShowEditForm(true)
+
+    if (user?.role === 'child') {
+      setFamilyMembers([{ id: user.id, name: user.name, role: user.role }])
+      return
+    }
 
     try {
       const response = await fetch('/api/auth/family-members', {
@@ -643,9 +651,15 @@ function App() {
   async function openNewForm() {
     setError('')
     setFormError('')
-    setForm({ ...emptyForm })
-    setFormLoading(true)
+    setForm({
+      ...emptyForm,
+      assigned_to_id: user?.role === 'child' ? String(user.id) : '',
+    })
+    setFamilyMembers([])
+    setFormLoading(user?.role === 'parent')
     navigate('/responsibilities/new')
+
+    if (user?.role === 'child') return
 
     try {
       const response = await fetch('/api/auth/family-members', {
@@ -722,12 +736,14 @@ function App() {
     const payload = {
       title: form.title.trim(),
       description: form.description.trim(),
-      assigned_to_id: Number(form.assigned_to_id),
+      assigned_to_id: user?.role === 'child'
+        ? Number(user.id)
+        : Number(form.assigned_to_id),
       due_date: form.due_date,
       planning_level: form.planning_level,
     }
 
-    if (form.frequency !== 'none') {
+    if (user?.role !== 'child' && form.frequency !== 'none') {
       payload.recurrence = {
         frequency: form.frequency,
         interval: Number(form.interval),
@@ -872,6 +888,7 @@ function App() {
             }
             newResponsibilityPage={
             <ResponsibilityForm
+              user={user}
               form={form}
               familyMembers={familyMembers}
               formLoading={formLoading}

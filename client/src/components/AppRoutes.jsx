@@ -53,11 +53,7 @@ export default function AppRoutes({
       />
       <Route
         path="/responsibilities/new"
-        element={
-          user.role === 'parent'
-            ? newResponsibilityPage
-            : <Navigate to="/dashboard" replace />
-        }
+        element={newResponsibilityPage}
       />
       <Route
         path="/responsibilities/:id"

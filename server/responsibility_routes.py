@@ -470,13 +470,29 @@ def list_responsibilities():
 @responsibility_bp.post("")
 @login_required
 def create_responsibility():
-    if current_user.role != "parent":
+    if current_user.role not in ("parent", "child"):
         return error_response(
-            "Only parents can create responsibilities.",
+            "You cannot create responsibilities.",
             403,
         )
 
     data = request_data()
+
+    if current_user.role == "child":
+        # Children may create only standalone responsibilities for themselves.
+        # Reject forged assignments rather than silently reassigning them.
+        if data.get("assigned_to_id", current_user.id) != current_user.id:
+            return error_response(
+                "Children can assign responsibilities only to themselves.",
+                403,
+            )
+        if data.get("recurrence") is not None:
+            return error_response(
+                "Only parents can create recurring responsibilities.",
+                403,
+            )
+        data["assigned_to_id"] = current_user.id
+
     fields, errors = validate_fields(data)
 
     if errors:
@@ -797,6 +813,22 @@ def update_responsibility(responsibility_id):
         )
 
     data = request_data()
+
+    if current_user.role == "child":
+        # A child must not reassign an existing responsibility, even when
+        # editing one they originally created.
+        if responsibility.assigned_to_id != current_user.id:
+            return error_response(
+                "Children can edit only their own responsibilities.",
+                403,
+            )
+        if data.get("assigned_to_id", current_user.id) != current_user.id:
+            return error_response(
+                "Children cannot assign responsibilities to others.",
+                403,
+            )
+        data["assigned_to_id"] = current_user.id
+
     fields, errors = validate_fields(
         data,
         existing=responsibility,

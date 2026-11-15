@@ -6,6 +6,7 @@ import {
   ChevronUp,
   Circle,
   Footprints,
+  ArrowUpRight,
   Plus,
   Repeat2,
   UserRound,
@@ -285,6 +286,7 @@ export default function Dashboard({
   const [familyMembers, setFamilyMembers] = useState([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [membersError, setMembersError] = useState('')
+  const [showAllChildActivity, setShowAllChildActivity] = useState(false)
 
   const isParent = user.role === 'parent'
 
@@ -352,6 +354,21 @@ export default function Dashboard({
     familyMembers.map((member) => Number(member.id))
   )
 
+  // Child-created responsibilities are visible to parents without approval.
+  // Sort by ID so newly created records appear first without assuming a
+  // particular timestamp format from the API.
+  const childCreators = new Map(
+    children.map((member) => [Number(member.id), member.name])
+  )
+
+  const recentChildActivity = responsibilities
+    .filter((item) => childCreators.has(Number(item.created_by_id)))
+    .sort((a, b) => Number(b.id) - Number(a.id))
+
+  const visibleChildActivity = showAllChildActivity
+    ? recentChildActivity
+    : recentChildActivity.slice(0, 5)
+
   const unmatched = responsibilities.filter(
     (item) => !knownIds.has(Number(item.assigned_to_id))
   )
@@ -409,6 +426,76 @@ export default function Dashboard({
         </div>
       </div>
 
+      {isParent && !dashboardLoading && !membersLoading && !membersError && (
+        <section className="responsibilities-section" aria-labelledby="family-activity-heading" style={{ marginBottom: '40px' }}>
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">INDEPENDENCE IN ACTION</span>
+              <h2 id="family-activity-heading">Recently added by children <span style={{ fontSize: '15px', fontWeight: 600, color: '#789781', letterSpacing: 0 }}>({recentChildActivity.length})</span></h2>
+              <p style={{ marginTop: '8px', color: '#62746a' }}>
+                See what your children are planning and offer support as they take the lead.
+              </p>
+            </div>
+          </div>
+
+          {recentChildActivity.length === 0 ? (
+            <div className="empty-state" style={{ padding: '24px' }}>
+              <p style={{ margin: 0 }}>
+                When a child creates a responsibility, it will appear here for you to review.
+              </p>
+            </div>
+          ) : (
+            <div className="compact-task-list" id="child-activity-list">
+              {visibleChildActivity.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="compact-task"
+                  onClick={() => openResponsibility(item.id)}
+                  disabled={detailLoading}
+                  style={{ textAlign: 'left', gap: '12px' }}
+                >
+                  <UserRound size={19} aria-hidden="true" />
+                  <span className="compact-task-title" style={{ flex: 1 }}>
+                    <strong>{childCreators.get(Number(item.created_by_id))}</strong>
+                    {' added: '}{item.title}
+                  </span>
+                  {item.due_date && (
+                    <span className="compact-task-date">
+                      Due {new Date(`${item.due_date.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                  )}
+                  <ArrowUpRight size={18} aria-hidden="true" />
+                </button>
+              ))}
+              {recentChildActivity.length > 5 && (
+                <button
+                  type="button"
+                  className="member-expand-button"
+                  onClick={() => setShowAllChildActivity((current) => !current)}
+                  aria-expanded={showAllChildActivity}
+                  aria-controls="child-activity-list"
+                  style={{
+                    marginTop: '12px',
+                    backgroundColor: '#E5EEE5',
+                    border: '1px solid #B7CCB9',
+                    color: '#294F46',
+                    fontWeight: 600,
+                  }}
+                >
+                  {showAllChildActivity ? 'Show less' : `View all activity (${recentChildActivity.length})`}
+                  {showAllChildActivity ? (
+                    <ChevronUp size={17} />
+                  ) : (
+                    <ChevronDown size={17} />
+                  )}
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="responsibilities-section">
         <div className="section-heading">
           <div>
@@ -423,8 +510,8 @@ export default function Dashboard({
             </h2>
           </div>
 
-          {isParent && (
-            <div className="dashboard-actions">
+          <div className="dashboard-actions">
+            {isParent && (
               <button
                 type="button"
                 className="secondary-button"
@@ -436,17 +523,17 @@ export default function Dashboard({
                 <Repeat2 size={18} />
                 Manage recurring series
               </button>
+            )}
 
-              <button
-                type="button"
-                className="primary-button"
-                onClick={openNewForm}
-              >
-                <Plus size={18} />
-                New responsibility
-              </button>
-            </div>
-          )}
+            <button
+              type="button"
+              className="primary-button"
+              onClick={openNewForm}
+            >
+              <Plus size={18} />
+              New responsibility
+            </button>
+          </div>
         </div>
 
         {error && (

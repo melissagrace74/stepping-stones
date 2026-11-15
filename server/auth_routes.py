@@ -217,24 +217,98 @@ def register_invited():
     }), 201
 
 
+@auth_bp.post("/children")
+@login_required
+def create_child():
+    if current_user.role != "parent":
+        return error_response("Only parents can create child accounts.", 403)
+
+    data = request_data()
+    name = data.get("name")
+    username = data.get("username")
+    password = data.get("password")
+
+    if not isinstance(name, str) or not name.strip():
+        return error_response("Child's name is required.")
+
+    name = name.strip()
+
+    if len(name) > 100:
+        return error_response("Name must be 100 characters or fewer.")
+
+    if not isinstance(username, str):
+        return error_response("Username is required.")
+
+    username = username.strip().lower()
+
+    if not 3 <= len(username) <= 50:
+        return error_response("Username must be 3 to 50 characters.")
+
+    if not all(
+        char.isascii() and (char.isalnum() or char in "._-")
+        for char in username
+    ):
+        return error_response(
+            "Username may contain letters, numbers, dots, underscores, and hyphens."
+        )
+
+    if not isinstance(password, str) or not 8 <= len(password) <= 128:
+        return error_response("Password must be between 8 and 128 characters.")
+
+    if User.query.filter_by(username=username).first():
+        return error_response("This username is already taken.", 409)
+
+    child = User(
+        family_id=current_user.family_id,
+        name=name,
+        username=username,
+        email=None,
+        password_hash=bcrypt.generate_password_hash(
+            password
+        ).decode("utf-8"),
+        role="child",
+    )
+
+    db.session.add(child)
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return error_response("Unable to create child account.", 409)
+
+    return jsonify({
+        "message": "Child account created successfully.",
+        "user": child.to_dict(),
+    }), 201
+
+
 @auth_bp.post("/login")
 def login():
     if current_user.is_authenticated:
         return error_response("You're already logged in.", 409)
 
     data = request_data()
-    email = normalize_email(data.get("email"))
+    identifier = data.get("email")
     password = data.get("password")
 
-    if not email or not isinstance(password, str):
-        return error_response("Email and password are required.")
+    if not isinstance(identifier, str) or not identifier.strip():
+        return error_response("Email or username and password are required.")
 
-    user = User.query.filter_by(email=email).first()
+    if not isinstance(password, str) or not password:
+        return error_response("Email or username and password are required.")
+
+    identifier = identifier.strip().lower()
+
+    if "@" in identifier:
+        user = User.query.filter_by(email=identifier).first()
+    else:
+        user = User.query.filter_by(username=identifier).first()
 
     if user is None or not bcrypt.check_password_hash(
         user.password_hash, password
     ):
-        return error_response("Incorrect email or password.", 401)
+        return error_response("Incorrect email, username, or password.", 401)
 
     login_user(user)
 

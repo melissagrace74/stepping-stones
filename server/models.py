@@ -70,7 +70,14 @@ class User(UserMixin, db.Model):
     email = db.Column(
         db.String(255),
         unique=True,
-        nullable=False,
+        nullable=True,
+        index=True
+    )
+
+    username = db.Column(
+        db.String(50),
+        unique=True,
+        nullable=True,
         index=True
     )
 
@@ -130,6 +137,7 @@ class User(UserMixin, db.Model):
             "family_id": self.family_id,
             "name": self.name,
             "email": self.email,
+            "username": self.username,
             "role": self.role
         }
 

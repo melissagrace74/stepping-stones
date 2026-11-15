@@ -18,6 +18,7 @@ export default function Login({
   loading,
   error,
   onLogin,
+  onRegister,
 }) {
   return (
     <main className="auth-layout">
@@ -134,8 +135,23 @@ export default function Login({
           </form>
 
           <p className="signup-note">
-            New to Stepping Stones? Family registration
-            is coming next.
+            New to Stepping Stones?{' '}
+            <button
+              type="button"
+              onClick={onRegister}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: '#294f46',
+                fontWeight: 700,
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                padding: 0,
+                fontSize: 'inherit',
+              }}
+            >
+              Create or join a family
+            </button>
           </p>
         </div>
       </section>

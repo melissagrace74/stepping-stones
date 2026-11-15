@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import ResponsibilityForm from './components/ResponsibilityForm'
 import Login from './pages/Login'
+import Register from './pages/Register'
 import SeriesManager from './pages/SeriesManager'
 import ResponsibilityDetail from './pages/ResponsibilityDetail'
 import Dashboard from './pages/Dashboard'
@@ -142,6 +143,7 @@ function App() {
   const [error, setError] = useState('')
   const [user, setUser] = useState(null)
   const [family, setFamily] = useState(null)
+  const [authScreen, setAuthScreen] = useState('login')
 
   const [responsibilities, setResponsibilities] = useState([])
   const [dashboardLoading, setDashboardLoading] = useState(false)
@@ -254,6 +256,16 @@ function App() {
     } finally {
       setLoading(false)
     }
+  }
+
+  function handleRegistered(registeredUser, registeredFamily) {
+    setUser(registeredUser)
+    setFamily(registeredFamily)
+    setError('')
+    setEmail('')
+    setPassword('')
+    setShowPassword(false)
+    setAuthScreen('login')
   }
 
   async function handleLogout() {
@@ -822,6 +834,18 @@ function App() {
     )
   }
 
+  if (authScreen === 'register') {
+    return (
+      <Register
+        onRegistered={handleRegistered}
+        onBack={() => {
+          setError('')
+          setAuthScreen('login')
+        }}
+      />
+    )
+  }
+
   return (
     <Login
       email={email}
@@ -833,6 +857,10 @@ function App() {
       loading={loading}
       error={error}
       onLogin={handleLogin}
+      onRegister={() => {
+        setError('')
+        setAuthScreen('register')
+      }}
     />
   )
 }

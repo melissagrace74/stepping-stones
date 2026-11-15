@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import ResponsibilityCard from './components/ResponsibilityCard'
 import ResponsibilityForm from './components/ResponsibilityForm'
+import StepList from './components/StepList'
 import Login from './pages/Login'
 import SeriesManager from './pages/SeriesManager'
 import './App.css'
@@ -1358,52 +1359,15 @@ function App() {
                   </form>
                 )}
 
-                {selectedResponsibility.steps?.length ? (
-                  <div className="steps-list">
-                    {selectedResponsibility.steps.map((step) => (
-                      <button
-                        type="button"
-                        className={`step-item ${
-                          step.is_complete ? 'step-completed' : ''
-                        }`}
-                        key={step.id}
-                        disabled={
-                          !canToggleSteps ||
-                          savingStepId !== null ||
-                          showEditForm ||
-                          deleteConfirm ||
-                          completionConfirm
-                        }
-                        onClick={() => toggleStep(step)}
-                        aria-label={`${
-                          step.is_complete
-                            ? 'Mark incomplete'
-                            : 'Mark complete'
-                        }: ${step.title}`}
-                      >
-                        {step.is_complete ? (
-                          <CheckCircle2 size={23} />
-                        ) : (
-                          <Circle size={23} />
-                        )}
-                        <span className="step-title">
-                          {step.title}
-                        </span>
-                        {step.due_date && (
-                          <span className="step-date">
-                            {formatDate(step.due_date)}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="empty-state">
-                    <Footprints size={30} />
-                    <h3>No steps yet</h3>
-                    <p>Preparation steps will appear here.</p>
-                  </div>
-                )}
+                <StepList
+                  selectedResponsibility={selectedResponsibility}
+                  canToggleSteps={canToggleSteps}
+                  savingStepId={savingStepId}
+                  showEditForm={showEditForm}
+                  deleteConfirm={deleteConfirm}
+                  completionConfirm={completionConfirm}
+                  toggleStep={toggleStep}
+                />
               </div>
             </section>
           ) : (

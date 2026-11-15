@@ -15,6 +15,7 @@ import {
   Trash2,
   UserRound,
 } from 'lucide-react'
+import ResponsibilityCard from './components/ResponsibilityCard'
 import Login from './pages/Login'
 import SeriesManager from './pages/SeriesManager'
 import './App.css'
@@ -142,85 +143,6 @@ async function readApi(response) {
   }
 
   return data
-}
-
-function ResponsibilityCard({ item, onOpen, disabled }) {
-  return (
-    <button
-      type="button"
-      className="responsibility-card responsibility-button"
-      onClick={() => onOpen(item.id)}
-      disabled={disabled}
-    >
-      <div className="card-top">
-        <span
-          className={`planning-badge ${planningClass(item.planning_level)}`}
-        >
-          {planningLabels[item.planning_level] || item.planning_level}
-        </span>
-
-        {item.is_complete && (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              color: '#426f51',
-              fontSize: '13px',
-              fontWeight: 700,
-            }}
-          >
-            <CheckCircle2 size={17} />
-            Completed
-          </span>
-        )}
-      </div>
-
-      <h3>{item.title}</h3>
-      <p>{item.description}</p>
-
-      {item.recurrence_schedule_id && (
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '13px',
-            fontWeight: 600,
-            color: '#537b61',
-            marginBottom: '12px',
-          }}
-        >
-          <Repeat2 size={15} />
-          Recurring responsibility
-        </span>
-      )}
-
-      <div className="card-meta">
-        <span>
-          <UserRound size={15} />
-          Assigned to <strong>{item.assignee_name}</strong>
-        </span>
-        <span className="created-date">
-          <CalendarPlus2 size={15} />
-          Created {formatCreatedDate(item.created_at)}
-        </span>
-        <span className="due-date">
-          <CalendarCheck2 size={15} />
-          Due <strong>{formatDate(item.due_date)}</strong>
-        </span>
-      </div>
-
-      <div className="card-progress">
-        <span>
-          {item.completed_steps || 0} of {item.total_steps || 0} steps complete
-        </span>
-        <span className="view-steps-label">
-          View details <ArrowRight size={18} />
-        </span>
-      </div>
-    </button>
-  )
 }
 
 function ResponsibilitySection({
@@ -1024,11 +946,9 @@ function App() {
                         MAKE IT A ROUTINE
                       </span>
 
-                      <label htmlFor="responsibility-frequency">
-                        Repeat
-                      </label>
                       <select
                         id="responsibility-frequency"
+                        aria-label="Repeat frequency"
                         value={form.frequency}
                         onChange={(event) =>
                           updateFrequency(event.target.value)

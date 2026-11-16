@@ -820,7 +820,12 @@ function App() {
             <span className="brand-icon">
               <Footprints size={24} strokeWidth={2.2} />
             </span>
-            <span>stepping stones</span>
+            <div className="dashboard-brand-copy">
+              <span className="dashboard-brand-name">stepping stones</span>
+              <span className="dashboard-brand-tagline">
+                A little progress makes a big difference.
+              </span>
+            </div>
           </div>
 
           <div

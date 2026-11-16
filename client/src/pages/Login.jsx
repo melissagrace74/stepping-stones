@@ -1,9 +1,12 @@
-
+import FamilyPhotoRotation from '../components/FamilyPhotoRotation'
 import {
   ArrowRight,
   Eye,
   EyeOff,
   Footprints,
+  UsersRound,
+  Handshake,
+  CheckCircle2,
   LockKeyhole,
   UserRound,
 } from 'lucide-react'
@@ -48,15 +51,13 @@ export default function Login({
           </p>
 
           <div className="story-tags">
-            <span>Plan together</span>
-            <span>Share responsibility</span>
-            <span>Own it</span>
+            <span><UsersRound size={15} strokeWidth={1.8} aria-hidden="true" />Plan together</span>
+            <span><Handshake size={15} strokeWidth={1.8} aria-hidden="true" />Share responsibility</span>
+            <span><CheckCircle2 size={15} strokeWidth={1.8} aria-hidden="true" />Own it</span>
           </div>
         </div>
 
-        <div className="story-footer">
-          A little progress makes a big difference.
-        </div>
+        <FamilyPhotoRotation />
       </section>
 
       <section className="auth-form-section">

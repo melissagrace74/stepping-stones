@@ -22,3 +22,6 @@ dist/
 *.sqlite3
 *.db
 *.log
+# Local source backups
+*.bak
+*.backup-*

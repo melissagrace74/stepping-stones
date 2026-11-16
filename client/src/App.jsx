@@ -122,6 +122,15 @@ function groupResponsibilities(responsibilities) {
 }
 
 async function readApi(response) {
+  const contentType = response.headers.get('content-type') || ''
+
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error(
+      `The server returned a non-JSON response (${response.status}) for ` +
+      `${new URL(response.url).pathname}. Please try again.`
+    )
+  }
+
   const data = await response.json()
 
   if (!response.ok) {
@@ -139,10 +148,34 @@ async function readApi(response) {
   return data
 }
 
+// Only retry the read-only dashboard request. Never retry a POST,
+// PATCH, or DELETE automatically, since doing so could duplicate changes.
+async function fetchDashboardResponsibilities() {
+  let lastError
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch('/api/responsibilities', {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      })
+      return await readApi(response)
+    } catch (error) {
+      lastError = error
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)))
+      }
+    }
+  }
+
+  throw lastError
+}
+
 function App() {
   const navigate = useNavigate()
   const detailMatch = useMatch('/responsibilities/:id')
-  const routeResponsibilityId = detailMatch?.params.id
+  const routeResponsibilityId = detailMatch?.params.id === 'new' ? null : detailMatch?.params.id
   const [sessionLoading, setSessionLoading] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -276,10 +309,7 @@ function App() {
       setDashboardLoading(true)
       setError('')
       try {
-        const response = await fetch('/api/responsibilities', {
-          credentials: 'include',
-        })
-        const data = await readApi(response)
+        const data = await fetchDashboardResponsibilities()
         if (active) {
           setResponsibilities(data.responsibilities || [])
         }
@@ -297,11 +327,9 @@ function App() {
   }, [user])
 
   async function reloadResponsibilities() {
-    const response = await fetch('/api/responsibilities', {
-      credentials: 'include',
-    })
-    const data = await readApi(response)
+    const data = await fetchDashboardResponsibilities()
     setResponsibilities(data.responsibilities || [])
+    setError('')
   }
 
   async function handleLogin(event) {

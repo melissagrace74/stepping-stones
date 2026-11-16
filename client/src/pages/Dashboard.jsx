@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   CheckCircle2,
   ChevronDown,
@@ -310,6 +311,7 @@ export default function Dashboard({
   setError,
   setShowSeriesManager,
 }) {
+  const navigate = useNavigate()
   const [familyMembers, setFamilyMembers] = useState([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [membersError, setMembersError] = useState('')
@@ -414,6 +416,43 @@ export default function Dashboard({
     completed: grouped.completed.filter((item) =>
       unmatchedIds.has(item.id)
     ),
+  }
+
+  // Show onboarding only after the family-members request succeeds.
+  // Existing families, children, and loading/error states keep their usual dashboard.
+  if (isParent && !membersLoading && !membersError && children.length === 0) {
+    return (
+      <>
+        <div className="dashboard-intro">
+          <span className="eyebrow">{family?.name || 'YOUR FAMILY'}</span>
+          <h1>Welcome to Stepping Stones!</h1>
+          <p>Every little step counts. Let's get your family started!</p>
+        </div>
+
+        <section
+          className="family-management-card"
+          aria-labelledby="first-child-heading"
+          style={{ maxWidth: '720px', margin: '0 auto', textAlign: 'center', padding: '48px 32px' }}
+        >
+          <Footprints size={42} aria-hidden="true" style={{ color: '#52765f', marginBottom: '16px' }} />
+          <h2 id="first-child-heading" style={{ marginBottom: '14px' }}>
+            Every journey starts with one step.
+          </h2>
+          <p style={{ color: '#62746a', maxWidth: '480px', margin: '0 auto 26px', lineHeight: 1.7 }}>
+            Add your first child to begin creating responsibilities, building
+            independence, and celebrating progress together.
+          </p>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => navigate('/family')}
+          >
+            <Plus size={18} aria-hidden="true" />
+            Add Your First Child
+          </button>
+        </section>
+      </>
+    )
   }
 
   return (
